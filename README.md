@@ -4,7 +4,7 @@
 
 ## Features
 
-- **Smart Stock Screener** — Browse 20+ Indian stocks with fundamental data, P/E ratios, OPM trends, and growth metrics
+- **Smart Stock Screener** — Browse  Indian stocks with fundamental data, P/E ratios, OPM trends, and growth metrics
 - **AI-Powered Analysis** — Get buy/hold/sell signals with scores out of 100, powered by financial trend analysis
 - **Virtual Portfolio** — Build and track a paper portfolio with live pricing, sector allocation, and P&L tracking
 - **Real-Time Market Data** — Live quotes via Upstox API, 52-week highs/lows, and market status indicators
