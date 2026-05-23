@@ -129,18 +129,26 @@ function Discover() {
           {searchResults && searchResults.length > 0 && (
             <div className="mt-3 space-y-1">
               {searchResults.slice(0, 5).map((s) => (
-                <div key={s.instrument_key} className="flex items-center justify-between p-2 rounded-lg hover:bg-card/40">
+                <Link
+                  key={s.instrument_key}
+                  to="/app/analyze/$symbol"
+                  params={{ symbol: s.trading_symbol }}
+                  className="flex items-center justify-between p-2 rounded-lg hover:bg-card/40 transition"
+                >
                   <div>
                     <span className="font-medium">{s.trading_symbol}</span>
                     <span className="text-xs text-muted-foreground ml-2">{s.name}</span>
                   </div>
-                  <button
-                    onClick={() => toggleWatchlist(s.trading_symbol, s.name)}
-                    className={`text-xs px-2 py-1 rounded ${watchlistTickers.has(s.trading_symbol) ? "text-[var(--bull)]" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    {watchlistTickers.has(s.trading_symbol) ? "Watching" : "Add"}
-                  </button>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.preventDefault(); toggleWatchlist(s.trading_symbol, s.name); }}
+                      className={`text-xs px-2 py-1 rounded ${watchlistTickers.has(s.trading_symbol) ? "text-[var(--bull)]" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      {watchlistTickers.has(s.trading_symbol) ? "Watching" : "Add"}
+                    </button>
+                    <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                </Link>
               ))}
             </div>
           )}

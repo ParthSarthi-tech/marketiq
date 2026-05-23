@@ -1,6 +1,7 @@
+import { Link } from "@tanstack/react-router";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
-import { Brain, Target, Clock, TrendingUp, Check } from "lucide-react";
+import { Brain, Target, Clock, TrendingUp, Check, ArrowRight } from "lucide-react";
 import floatAi from "@/assets/float-ai.png";
 
 const steps = [
@@ -58,9 +59,9 @@ export function AISection() {
             ))}
           </div>
 
-          <button className="mt-10 bg-gradient-primary text-primary-foreground font-semibold px-7 py-4 rounded-full shadow-glow hover:scale-105 transition">
-            Take the 2-min quiz →
-          </button>
+          <Link to="/app/onboarding" className="mt-10 bg-gradient-primary text-primary-foreground font-semibold px-7 py-4 rounded-full shadow-glow hover:scale-105 transition inline-flex items-center gap-2">
+            Take the 2-min quiz <ArrowRight className="w-4 h-4" />
+          </Link>
         </motion.div>
 
         <InteractiveMatchCard yImg={yImg} rotate={rotate} />

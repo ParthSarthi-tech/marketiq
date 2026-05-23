@@ -126,6 +126,35 @@ export function getInstrumentKeyForIndex(indexName: string): string {
   return indexMap[indexName] || `NSE_INDEX|${indexName}`;
 }
 
+export async function resolveAnyKey(ticker: string): Promise<string | null> {
+  if (RESOLVED_KEYS[ticker]) {
+    return RESOLVED_KEYS[ticker];
+  }
+
+  const results = await searchInstruments(ticker, "NSE");
+
+  const eqMatch = results.find(
+    (r) =>
+      r.trading_symbol.toUpperCase() === ticker.toUpperCase() &&
+      r.segment === "NSE_EQ"
+  );
+
+  if (eqMatch) {
+    RESOLVED_KEYS[ticker] = eqMatch.instrument_key;
+    SYMBOL_TO_KEY[eqMatch.trading_symbol] = eqMatch.instrument_key;
+    return eqMatch.instrument_key;
+  }
+
+  const fallback = results.find((r) => r.segment === "NSE_EQ");
+  if (fallback) {
+    RESOLVED_KEYS[ticker] = fallback.instrument_key;
+    SYMBOL_TO_KEY[fallback.trading_symbol] = fallback.instrument_key;
+    return fallback.instrument_key;
+  }
+
+  return null;
+}
+
 export function resolveSearchResult(
   result: InstrumentSearchResult
 ): { symbol: string; name: string; instrumentKey: string } | null {

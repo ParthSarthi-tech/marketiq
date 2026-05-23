@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import { ArrowRight, Sparkles, PlayCircle } from "lucide-react";
@@ -77,14 +78,14 @@ export function Hero() {
           transition={{ delay: 0.7 }}
           className="mt-10 flex flex-wrap justify-center gap-4"
         >
-          <button className="group bg-gradient-primary text-primary-foreground font-semibold px-7 py-4 rounded-full inline-flex items-center gap-2 shadow-glow hover:scale-105 transition">
+          <Link to="/sign-up" className="group bg-gradient-primary text-primary-foreground font-semibold px-7 py-4 rounded-full inline-flex items-center gap-2 shadow-glow hover:scale-105 transition">
             Start free demo
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
-          </button>
-          <button className="glass font-medium px-7 py-4 rounded-full inline-flex items-center gap-2 hover:bg-card transition">
+          </Link>
+          <Link to="/how-it-works" className="glass font-medium px-7 py-4 rounded-full inline-flex items-center gap-2 hover:bg-card transition">
             <PlayCircle className="w-5 h-5 text-accent" />
             Watch how it works
-          </button>
+          </Link>
         </motion.div>
 
         <motion.div

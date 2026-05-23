@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
-import { sendChatMessage } from "@/lib/ai";
+import { useState, useCallback, useRef } from "react";
+import { chatWithAI } from "@/lib/ai-proxy";
+import { buildSystemPrompt } from "@/lib/ai";
 import type { QuizResponse, Portfolio } from "@/lib/supabase";
 import type { PortfolioHolding } from "./usePortfolio";
 
@@ -21,6 +22,8 @@ export function useAI(context: () => AIContextInput) {
     { role: "ai", content: "Hi! I'm your MarketIQ advisor. Ask me about stocks, portfolio analysis, or investment strategies.", ts: Date.now() },
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -32,20 +35,33 @@ export function useAI(context: () => AIContextInput) {
 
       try {
         const ctx = context();
-        const history = messages.map((m) => ({
-          role: (m.role === "user" ? "user" : "model") as "user" | "model",
-          content: m.content,
-        }));
-
-        const response = await sendChatMessage(content, {
+        const systemPrompt = buildSystemPrompt({
           userProfile: ctx.userProfile,
           portfolio: ctx.portfolio,
           portfolioValue: ctx.portfolioValue,
           cashBalance: ctx.cashBalance,
-        }, history);
+        });
 
-        const aiMsg: Message = { role: "ai", content: response, ts: Date.now() };
-        setMessages((prev) => [...prev, aiMsg]);
+        const history = messagesRef.current.map((m) => ({
+          role: (m.role === "user" ? "user" : "model") as "user" | "model",
+          content: m.content,
+        }));
+
+        const result = await chatWithAI({
+          data: { message: content, systemPrompt, history },
+        });
+
+        if (result.error) {
+          const errorMsg: Message = {
+            role: "ai",
+            content: result.error,
+            ts: Date.now(),
+          };
+          setMessages((prev) => [...prev, errorMsg]);
+        } else {
+          const aiMsg: Message = { role: "ai", content: result.text || "", ts: Date.now() };
+          setMessages((prev) => [...prev, aiMsg]);
+        }
       } catch (error) {
         console.error("AI Error:", error);
         const errorMsg: Message = {
@@ -58,7 +74,7 @@ export function useAI(context: () => AIContextInput) {
         setIsLoading(false);
       }
     },
-    [messages, context]
+    [context]
   );
 
   const clearChat = useCallback(() => {

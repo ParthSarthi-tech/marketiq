@@ -3,7 +3,8 @@ import { useState, type ReactNode } from "react";
 import { ArrowRight, Eye, EyeOff, Loader2, Mail, Lock, User, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 import { useNavigate } from "@tanstack/react-router";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, hasCompletedOnboarding } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 
 const signInSchema = z.object({
   email: z.string().trim().email({ message: "Enter a valid email" }).max(255),
@@ -31,9 +32,29 @@ interface Field {
 }
 
 const baseFields: Record<string, Field> = {
-  name: { name: "name", label: "Full name", type: "text", placeholder: "Aarav Sharma", icon: User, autoComplete: "name" },
-  email: { name: "email", label: "Email", type: "email", placeholder: "you@marketiq.in", icon: Mail, autoComplete: "email" },
-  password: { name: "password", label: "Password", type: "password", placeholder: "••••••••", icon: Lock },
+  name: {
+    name: "name",
+    label: "Full name",
+    type: "text",
+    placeholder: "Aarav Sharma",
+    icon: User,
+    autoComplete: "name",
+  },
+  email: {
+    name: "email",
+    label: "Email",
+    type: "email",
+    placeholder: "you@marketiq.in",
+    icon: Mail,
+    autoComplete: "email",
+  },
+  password: {
+    name: "password",
+    label: "Password",
+    type: "password",
+    placeholder: "••••••••",
+    icon: Lock,
+  },
 };
 
 interface Props {
@@ -53,9 +74,14 @@ function strength(pw: string) {
 export function AuthForm({ mode, cta }: Props) {
   const navigate = useNavigate();
   const { signIn, signUp } = useAuth();
-  const fields: Field[] = mode === "up"
-    ? [baseFields.name, baseFields.email, { ...baseFields.password, autoComplete: "new-password" }]
-    : [baseFields.email, { ...baseFields.password, autoComplete: "current-password" }];
+  const fields: Field[] =
+    mode === "up"
+      ? [
+          baseFields.name,
+          baseFields.email,
+          { ...baseFields.password, autoComplete: "new-password" },
+        ]
+      : [baseFields.email, { ...baseFields.password, autoComplete: "current-password" }];
 
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -93,16 +119,29 @@ export function AuthForm({ mode, cta }: Props) {
 
     try {
       if (mode === "up") {
-        await signUp(values.email, values.password);
+        const { data } = await supabase.auth.signUp({
+          email: values.email,
+          password: values.password,
+        });
+
         setDone(true);
         setTimeout(() => {
-          navigate({ to: "/app/onboarding" });
+          if (data?.session) {
+            navigate({ to: "/app/onboarding" });
+          } else {
+            navigate({ to: "/sign-in", search: { confirmed: "false" } });
+          }
         }, 700);
       } else {
-        await signIn(values.email, values.password);
+        const user = await signIn(values.email, values.password);
         setDone(true);
-        setTimeout(() => {
-          navigate({ to: "/app" });
+        setTimeout(async () => {
+          if (user?.id) {
+            const onboarded = await hasCompletedOnboarding(user.id);
+            navigate({ to: onboarded ? "/app" : "/app/onboarding" });
+          } else {
+            navigate({ to: "/app" });
+          }
         }, 700);
       }
     } catch (err: unknown) {
@@ -148,7 +187,9 @@ export function AuthForm({ mode, cta }: Props) {
                       : "border-border hover:border-border/80"
                 }`}
               >
-                <Icon className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition ${focused === f.name ? "text-primary" : "text-muted-foreground"}`} />
+                <Icon
+                  className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 transition ${focused === f.name ? "text-primary" : "text-muted-foreground"}`}
+                />
                 <input
                   type={isPw && showPw ? "text" : f.type}
                   name={f.name}
@@ -192,10 +233,7 @@ export function AuthForm({ mode, cta }: Props) {
                 >
                   <div className="flex gap-1">
                     {[0, 1, 2, 3].map((j) => (
-                      <div
-                        key={j}
-                        className="h-1 flex-1 rounded-full bg-border overflow-hidden"
-                      >
+                      <div key={j} className="h-1 flex-1 rounded-full bg-border overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: pwScore > j ? "100%" : "0%" }}
@@ -213,7 +251,9 @@ export function AuthForm({ mode, cta }: Props) {
                       </div>
                     ))}
                   </div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{pwLabel}</div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                    {pwLabel}
+                  </div>
                 </motion.div>
               )}
 
@@ -240,8 +280,12 @@ export function AuthForm({ mode, cta }: Props) {
         >
           <input type="checkbox" required className="mt-0.5 accent-[var(--primary)]" />
           <span>
-            I agree to the <a className="text-foreground hover:text-accent transition story-link">Terms</a> and{" "}
-            <a className="text-foreground hover:text-accent transition story-link">Privacy Policy</a>.
+            I agree to the{" "}
+            <a className="text-foreground hover:text-accent transition story-link">Terms</a> and{" "}
+            <a className="text-foreground hover:text-accent transition story-link">
+              Privacy Policy
+            </a>
+            .
           </span>
         </motion.label>
       )}
@@ -255,15 +299,33 @@ export function AuthForm({ mode, cta }: Props) {
       >
         <AnimatePresence mode="wait">
           {done ? (
-            <motion.span key="d" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="inline-flex items-center gap-2">
+            <motion.span
+              key="d"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="inline-flex items-center gap-2"
+            >
               <CheckCircle2 className="w-4 h-4" /> You're in
             </motion.span>
           ) : loading ? (
-            <motion.span key="l" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="inline-flex items-center gap-2">
+            <motion.span
+              key="l"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="inline-flex items-center gap-2"
+            >
               <Loader2 className="w-4 h-4 animate-spin" /> Securing session…
             </motion.span>
           ) : (
-            <motion.span key="c" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="inline-flex items-center gap-2">
+            <motion.span
+              key="c"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="inline-flex items-center gap-2"
+            >
               {cta}
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
             </motion.span>
@@ -310,7 +372,10 @@ function Divider() {
 function GoogleIcon() {
   return (
     <svg viewBox="0 0 24 24" className="w-4 h-4">
-      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.66 4.1-5.5 4.1-3.3 0-6-2.74-6-6.1s2.7-6.1 6-6.1c1.88 0 3.14.8 3.86 1.5l2.63-2.55C16.84 3.3 14.66 2.4 12 2.4 6.93 2.4 2.8 6.5 2.8 11.6S6.93 20.8 12 20.8c6.93 0 9.2-4.86 9.2-7.4 0-.5-.05-.88-.13-1.2H12z" />
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.9h5.5c-.24 1.4-1.66 4.1-5.5 4.1-3.3 0-6-2.74-6-6.1s2.7-6.1 6-6.1c1.88 0 3.14.8 3.86 1.5l2.63-2.55C16.84 3.3 14.66 2.4 12 2.4 6.93 2.4 2.8 6.5 2.8 11.6S6.93 20.8 12 20.8c6.93 0 9.2-4.86 9.2-7.4 0-.5-.05-.88-.13-1.2H12z"
+      />
     </svg>
   );
 }

@@ -123,7 +123,7 @@ export function FeaturesHero() {
           transition={{ delay: 1.4 }}
           className="mt-10 flex items-center justify-center gap-3"
         >
-          <Link to="/" className="group relative bg-gradient-primary text-primary-foreground text-sm font-semibold px-6 py-3 rounded-full transition shadow-glow inline-flex items-center gap-2 overflow-hidden">
+          <Link to="/sign-up" className="group relative bg-gradient-primary text-primary-foreground text-sm font-semibold px-6 py-3 rounded-full transition shadow-glow inline-flex items-center gap-2 overflow-hidden">
             <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
             Open the live tour <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
           </Link>

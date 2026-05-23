@@ -1,4 +1,7 @@
 import { getCsvFile, STOCK_CONFIG } from "./stockMetadata";
+import { fetchFinnhubData } from "./finnhub-proxy";
+
+export type DataSource = "csv" | "hardcoded" | "finnhub";
 
 export interface StockData {
   symbol: string;
@@ -22,6 +25,7 @@ export interface StockData {
     peTrend: "declining" | "stable" | "increasing";
     opmTrend: "improving" | "stable" | "declining";
   };
+  dataSource: DataSource;
 }
 
 const csvCache = new Map<string, StockData>();
@@ -133,6 +137,7 @@ function parseCSVData(csvText: string, symbol: string): StockData | null {
       peTrend,
       opmTrend: "stable" as const,
     },
+    dataSource: "csv" as const,
   };
 }
 
@@ -147,7 +152,7 @@ const STOCK_FUNDAMENTALS: Record<string, StockData> = {
     profitGrowth: [8.5, 12.2, 15.8, 18.2, 22.5, 19.8, 17.2, 18.5],
     peHistory: [25.2, 24.5, 23.8, 22.2, 21.5, 20.2, 18.5, 17.3],
     opmHistory: [26.2, 26.5, 26.8, 27.2, 27.5, 27.2, 27.0, 27.1],
-    trends: { salesGrowth: 18.5, peTrend: "declining", opmTrend: "stable" }
+    trends: { salesGrowth: 18.5, peTrend: "declining", opmTrend: "stable"  },
   },
 HDFCRELIANCE: {
     symbol: "RELIANCE", companyName: "Reliance Industries",
@@ -159,7 +164,7 @@ HDFCRELIANCE: {
     profitGrowth: [6.5, 8.2, 10.5, 13.8, 18.2, 22.5, 15.2, 10.8],
     peHistory: [28.5, 27.8, 26.5, 25.2, 24.5, 26.8, 28.2, 28.5],
     opmHistory: [12.5, 13.2, 13.8, 14.2, 14.8, 14.5, 14.2, 14.2],
-    trends: { salesGrowth: 8.2, peTrend: "stable", opmTrend: "stable" }
+    trends: { salesGrowth: 8.2, peTrend: "stable", opmTrend: "stable"  },
   },
 HDFCBANK: {
     symbol: "HDFCBANK", companyName: "HDFC Bank",
@@ -171,8 +176,7 @@ HDFCBANK: {
     profitGrowth: [6.5, 9.2, 12.5, 16.8, 21.2, 15.5, 10.2, 12.8],
     peHistory: [22.5, 21.8, 20.5, 19.2, 18.8, 19.5, 18.2, 18.5],
     opmHistory: [36.5, 37.2, 37.8, 38.2, 38.8, 38.5, 38.2, 38.5],
-    trends: { salesGrowth: 12.8, peTrend: "declining", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 12.8, peTrend: "declining", opmTrend: "stable" }  },
 INFY: {
     symbol: "INFY", companyName: "Infosys",
     currentSales: 155000, currentOPM: 25.2, currentPE: 20.5, currentEPS: 64.0,
@@ -183,8 +187,7 @@ INFY: {
     profitGrowth: [2.5, 4.8, 7.2, 8.5, 9.2, 6.5, 5.2, 6.5],
     peHistory: [24.5, 23.8, 22.5, 21.8, 21.2, 20.8, 20.2, 20.5],
     opmHistory: [24.2, 24.5, 24.8, 25.2, 25.5, 25.2, 25.0, 25.2],
-    trends: { salesGrowth: 6.2, peTrend: "stable", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 6.2, peTrend: "stable", opmTrend: "stable" }  },
 ITC: {
     symbol: "ITC", companyName: "ITC Limited",
     currentSales: 77000, currentOPM: 38.5, currentPE: 22.0, currentEPS: 16.5,
@@ -195,8 +198,7 @@ ITC: {
     profitGrowth: [4.5, 6.2, 8.8, 11.2, 14.5, 10.2, 7.8, 8.5],
     peHistory: [25.2, 24.5, 23.8, 23.2, 22.8, 22.5, 22.2, 22.0],
     opmHistory: [36.8, 37.2, 37.5, 38.2, 38.8, 38.5, 38.2, 38.5],
-    trends: { salesGrowth: 8.5, peTrend: "stable", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 8.5, peTrend: "stable", opmTrend: "stable" }  },
 LT: {
     symbol: "LT", companyName: "Larsen & Toubro",
     currentSales: 215000, currentOPM: 12.5, currentPE: 28.0, currentEPS: 92.0,
@@ -207,8 +209,7 @@ LT: {
     profitGrowth: [5.2, 7.5, 10.2, 14.5, 18.5, 12.8, 9.5, 10.5],
     peHistory: [32.5, 31.2, 30.5, 29.8, 29.2, 28.8, 28.2, 28.0],
     opmHistory: [11.2, 11.5, 11.8, 12.2, 12.8, 12.5, 12.2, 12.5],
-    trends: { salesGrowth: 15.2, peTrend: "stable", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 15.2, peTrend: "stable", opmTrend: "stable" }  },
 SBIN: {
     symbol: "SBIN", companyName: "State Bank of India",
     currentSales: 385000, currentOPM: 42.2, currentPE: 8.5, currentEPS: 85.0,
@@ -219,8 +220,7 @@ SBIN: {
     profitGrowth: [15.2, 18.5, 22.5, 28.2, 35.5, 25.2, 18.5, 20.2],
     peHistory: [12.5, 11.8, 10.5, 9.8, 9.2, 8.8, 8.5, 8.5],
     opmHistory: [38.5, 39.2, 40.5, 41.2, 42.5, 42.2, 42.0, 42.2],
-    trends: { salesGrowth: 9.5, peTrend: "declining", opmTrend: "improving" }
-  },
+    trends: { salesGrowth: 9.5, peTrend: "declining", opmTrend: "improving" }  },
 BAJFINANCE: {
     symbol: "BAJFINANCE", companyName: "Bajaj Finance",
     currentSales: 42000, currentOPM: 58.2, currentPE: 32.5, currentEPS: 225.0,
@@ -231,8 +231,7 @@ BAJFINANCE: {
     profitGrowth: [20.2, 22.5, 25.8, 30.2, 35.5, 28.5, 22.8, 24.5],
     peHistory: [38.5, 37.2, 35.8, 34.2, 33.5, 33.2, 32.8, 32.5],
     opmHistory: [52.5, 54.2, 55.8, 57.2, 58.5, 58.2, 58.0, 58.2],
-    trends: { salesGrowth: 25.2, peTrend: "stable", opmTrend: "improving" }
-  },
+    trends: { salesGrowth: 25.2, peTrend: "stable", opmTrend: "improving" }  },
 TITAN: {
     symbol: "TITAN", companyName: "Titan Company",
     currentSales: 52000, currentOPM: 15.2, currentPE: 35.0, currentEPS: 42.0,
@@ -243,8 +242,7 @@ TITAN: {
     profitGrowth: [5.5, 8.2, 10.5, 14.2, 18.8, 14.5, 11.2, 12.8],
     peHistory: [28.5, 29.8, 31.2, 32.5, 33.8, 34.5, 35.2, 35.0],
     opmHistory: [13.5, 14.2, 14.5, 14.8, 15.2, 15.5, 15.2, 15.2],
-    trends: { salesGrowth: 14.5, peTrend: "increasing", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 14.5, peTrend: "increasing", opmTrend: "stable" }  },
 ADANIPORTS: {
     symbol: "ADANIPORTS", companyName: "Adani Ports",
     currentSales: 32000, currentOPM: 52.5, currentPE: 28.0, currentEPS: 52.0,
@@ -255,8 +253,7 @@ ADANIPORTS: {
     profitGrowth: [10.2, 13.5, 16.8, 21.2, 26.5, 19.8, 15.2, 16.5],
     peHistory: [32.5, 31.2, 30.5, 29.8, 29.2, 28.5, 28.2, 28.0],
     opmHistory: [48.5, 49.2, 50.5, 51.2, 52.8, 52.5, 52.2, 52.5],
-    trends: { salesGrowth: 18.5, peTrend: "stable", opmTrend: "improving" }
-  },
+    trends: { salesGrowth: 18.5, peTrend: "stable", opmTrend: "improving" }  },
 SUNPHARMA: {
     symbol: "SUNPHARMA", companyName: "Sun Pharma",
     currentSales: 85000, currentOPM: 22.5, currentPE: 25.0, currentEPS: 58.0,
@@ -267,8 +264,7 @@ SUNPHARMA: {
     profitGrowth: [1.2, 2.5, 4.2, 6.5, 9.2, 5.8, 3.5, 4.2],
     peHistory: [28.5, 27.8, 27.2, 26.5, 26.2, 25.8, 25.2, 25.0],
     opmHistory: [20.5, 21.2, 21.8, 22.2, 22.8, 22.5, 22.2, 22.5],
-    trends: { salesGrowth: 5.2, peTrend: "declining", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 5.2, peTrend: "declining", opmTrend: "stable" }  },
 BHARTIARTL: {
     symbol: "BHARTIARTL", companyName: "Bharti Airtel",
     currentSales: 145000, currentOPM: 45.2, currentPE: 22.5, currentEPS: 18.5,
@@ -279,8 +275,7 @@ BHARTIARTL: {
     profitGrowth: [8.2, 10.5, 12.8, 16.5, 22.5, 15.2, 11.8, 13.5],
     peHistory: [25.2, 24.5, 23.8, 23.2, 22.8, 22.5, 22.2, 22.5],
     opmHistory: [42.5, 43.2, 44.2, 44.8, 45.5, 45.2, 45.0, 45.2],
-    trends: { salesGrowth: 10.2, peTrend: "stable", opmTrend: "improving" }
-  },
+    trends: { salesGrowth: 10.2, peTrend: "stable", opmTrend: "improving" }  },
   AXISBANK: {
     symbol: "AXISBANK", companyName: "Axis Bank",
     currentSales: 95000, currentOPM: 38.2, currentPE: 14.2, currentEPS: 85.0,
@@ -291,8 +286,7 @@ BHARTIARTL: {
     profitGrowth: [10.2, 13.5, 17.2, 22.5, 28.5, 20.2, 15.5, 17.8],
     peHistory: [18.5, 17.2, 16.5, 15.8, 15.2, 14.8, 14.5, 14.2],
     opmHistory: [35.5, 36.2, 37.2, 37.8, 38.5, 38.2, 38.0, 38.2],
-    trends: { salesGrowth: 14.2, peTrend: "declining", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 14.2, peTrend: "declining", opmTrend: "stable" }  },
   KOTAKBANK: {
     symbol: "KOTAKBANK", companyName: "Kotak Mahindra Bank",
     currentSales: 48000, currentOPM: 42.8, currentPE: 18.5, currentEPS: 92.0,
@@ -303,8 +297,7 @@ BHARTIARTL: {
     profitGrowth: [9.2, 11.5, 14.2, 18.5, 23.2, 16.5, 12.8, 14.5],
     peHistory: [22.5, 21.8, 20.5, 19.8, 19.2, 18.8, 18.5, 18.5],
     opmHistory: [40.5, 41.2, 42.5, 43.2, 43.5, 42.8, 42.5, 42.8],
-    trends: { salesGrowth: 11.5, peTrend: "stable", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 11.5, peTrend: "stable", opmTrend: "stable" }  },
   MARUTI: {
     symbol: "MARUTI", companyName: "Maruti Suzuki",
     currentSales: 145000, currentOPM: 10.5, currentPE: 26.0, currentEPS: 285.0,
@@ -315,8 +308,7 @@ BHARTIARTL: {
     profitGrowth: [3.5, 5.2, 7.8, 11.2, 15.5, 8.5, 5.2, 6.8],
     peHistory: [28.5, 27.8, 27.2, 26.8, 26.5, 26.2, 26.0, 26.0],
     opmHistory: [9.2, 9.5, 9.8, 10.2, 10.8, 10.5, 10.2, 10.5],
-    trends: { salesGrowth: 8.2, peTrend: "stable", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 8.2, peTrend: "stable", opmTrend: "stable" }  },
   HINDUNILVR: {
     symbol: "HINDUNILVR", companyName: "Hindustan Unilever",
     currentSales: 62000, currentOPM: 24.5, currentPE: 28.0, currentEPS: 48.0,
@@ -327,8 +319,7 @@ BHARTIARTL: {
     profitGrowth: [1.8, 2.5, 3.8, 5.2, 7.5, 4.5, 3.2, 3.8],
     peHistory: [25.2, 25.8, 26.5, 27.2, 27.8, 28.2, 28.5, 28.0],
     opmHistory: [23.5, 23.8, 24.2, 24.5, 24.8, 24.5, 24.2, 24.5],
-    trends: { salesGrowth: 4.2, peTrend: "increasing", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 4.2, peTrend: "increasing", opmTrend: "stable" }  },
   ICICIBANK: {
     symbol: "ICICIBANK", companyName: "ICICI Bank",
     currentSales: 125000, currentOPM: 40.2, currentPE: 16.5, currentEPS: 72.0,
@@ -339,8 +330,7 @@ BHARTIARTL: {
     profitGrowth: [9.5, 12.2, 15.8, 20.5, 26.2, 18.5, 14.2, 16.5],
     peHistory: [20.5, 19.2, 18.5, 17.8, 17.2, 16.8, 16.5, 16.5],
     opmHistory: [38.2, 39.2, 40.5, 41.2, 42.5, 40.2, 40.0, 40.2],
-    trends: { salesGrowth: 12.8, peTrend: "declining", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 12.8, peTrend: "declining", opmTrend: "stable" }  },
   ASIANPAINT: {
     symbol: "ASIANPAINT", companyName: "Asian Paints",
     currentSales: 35000, currentOPM: 18.2, currentPE: 42.0, currentEPS: 42.0,
@@ -351,8 +341,7 @@ BHARTIARTL: {
     profitGrowth: [2.2, 3.8, 5.5, 7.8, 11.2, 6.5, 4.2, 5.2],
     peHistory: [35.2, 36.8, 38.5, 40.2, 41.5, 42.8, 43.2, 42.0],
     opmHistory: [16.5, 17.2, 17.8, 18.2, 18.8, 18.5, 18.2, 18.2],
-    trends: { salesGrowth: 6.5, peTrend: "increasing", opmTrend: "stable" }
-  },
+    trends: { salesGrowth: 6.5, peTrend: "increasing", opmTrend: "stable" }  },
   WIPRO: {
     symbol: "WIPRO", companyName: "Wipro",
     currentSales: 92000, currentOPM: 17.5, currentPE: 22.0, currentEPS: 42.0,
@@ -363,7 +352,7 @@ BHARTIARTL: {
     profitGrowth: [0.8, 1.5, 2.8, 4.2, 6.5, 3.5, 2.2, 2.8],
     peHistory: [24.5, 24.2, 23.8, 23.2, 22.8, 22.5, 22.2, 22.0],
     opmHistory: [16.5, 16.8, 17.2, 17.5, 17.8, 17.5, 17.2, 17.5],
-    trends: { salesGrowth: 3.5, peTrend: "stable", opmTrend: "stable" }
+    trends: { salesGrowth: 3.5, peTrend: "stable", opmTrend: "stable"  },
   },
   HDFC: {
     symbol: "HDFC", companyName: "Housing Development Finance Corp",
@@ -375,7 +364,7 @@ BHARTIARTL: {
     profitGrowth: [8.2, 10.5, 13.2, 16.5, 20.2, 14.8, 11.5, 12.8],
     peHistory: [22.5, 21.8, 21.2, 20.8, 20.5, 20.2, 20.0, 20.0],
     opmHistory: [33.5, 34.2, 34.8, 35.2, 35.5, 35.2, 35.0, 35.2],
-    trends: { salesGrowth: 10.2, peTrend: "stable", opmTrend: "stable" }
+    trends: { salesGrowth: 10.2, peTrend: "stable", opmTrend: "stable"  },
   }
 };
 
@@ -386,7 +375,60 @@ export function loadStockData(symbol: string): StockData | null {
     return csvCache.get(upperSymbol)!;
   }
   
-  return STOCK_FUNDAMENTALS[upperSymbol] || null;
+  const hardcoded = STOCK_FUNDAMENTALS[upperSymbol];
+  if (hardcoded) {
+    return { ...hardcoded, dataSource: "hardcoded" };
+  }
+  
+  return null;
+}
+
+function buildFromFinnhub(symbol: string, result: import("./finnhub-proxy").FinnhubResult): StockData | null {
+  const { profile, metric } = result;
+  if (!metric?.peTTM && !metric?.epsTTM) return null;
+
+  const name = profile?.name || symbol;
+  const sector = profile?.sector || "Other";
+  const mc = profile?.marketCap
+    ? `₹${(profile.marketCap / 100).toFixed(1)}L Cr`
+    : "N/A";
+
+  const currentPE = metric.peTTM || 0;
+  const currentEPS = metric.epsTTM || 0;
+  const currentDividend = metric.dividendYield
+    ? parseFloat((metric.dividendYield * 100).toFixed(1))
+    : 0;
+  const currentOPM = metric.operatingMargin
+    ? parseFloat((metric.operatingMargin * 100).toFixed(1))
+    : 0;
+  const currentPrice = 0;
+  const week52High = metric.high52 || 0;
+  const week52Low = metric.low52 || 0;
+
+  return {
+    symbol,
+    companyName: name,
+    currentSales: metric.revenueTTM || 0,
+    currentOPM,
+    currentPE,
+    currentEPS,
+    currentPrice,
+    currentDividendPayout: currentDividend,
+    sector,
+    marketCap: mc,
+    week52High: Math.round(week52High),
+    week52Low: Math.round(week52Low),
+    revenueGrowth: metric.revenueGrowth ? [metric.revenueGrowth] : [],
+    profitGrowth: [],
+    peHistory: [currentPE],
+    opmHistory: currentOPM > 0 ? [currentOPM] : [],
+    trends: {
+      salesGrowth: metric.revenueGrowth || 0,
+      peTrend: "stable",
+      opmTrend: "stable",
+    },
+    dataSource: "finnhub",
+  };
 }
 
 export async function loadStockDataAsync(symbol: string): Promise<StockData | null> {
@@ -400,8 +442,26 @@ export async function loadStockDataAsync(symbol: string): Promise<StockData | nu
   if (csvData) {
     return csvData;
   }
-  
-  return STOCK_FUNDAMENTALS[upperSymbol] || null;
+
+  const hardcoded = STOCK_FUNDAMENTALS[upperSymbol];
+  if (hardcoded) {
+    return { ...hardcoded, dataSource: "hardcoded" };
+  }
+
+  try {
+    const finnhubResult = await fetchFinnhubData({ data: { ticker: upperSymbol } });
+    if (finnhubResult && !finnhubResult.error) {
+      const built = buildFromFinnhub(upperSymbol, finnhubResult);
+      if (built) {
+        csvCache.set(upperSymbol, built);
+        return built;
+      }
+    }
+  } catch (e) {
+    console.warn(`[stockData] Finnhub fetch failed for ${upperSymbol}:`, e);
+  }
+
+  return null;
 }
 
 export async function preloadAllStockData(): Promise<void> {

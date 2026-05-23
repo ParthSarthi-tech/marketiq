@@ -1,9 +1,10 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, BookOpen } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, BookOpen, Loader2, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { useStockQuote } from "@/hooks/useStocks";
-import { loadStockData, getStockScore, getSignalLabel, type StockData } from "@/lib/stockData";
+import { loadStockDataAsync, getStockScore, getSignalLabel, type StockData } from "@/lib/stockData";
 
 export const Route = createFileRoute("/app/analyze/$symbol")({
   component: StockAnalyze,
@@ -13,25 +14,45 @@ export const Route = createFileRoute("/app/analyze/$symbol")({
 function StockAnalyze() {
   const { symbol } = useParams({ from: "/app/analyze/$symbol" });
   const { data: quote } = useStockQuote(symbol);
-  
-  const stockData = loadStockData(symbol);
-  const score = stockData ? getStockScore(stockData) : 0;
-  const signal = getSignalLabel(score);
 
-  if (!stockData) {
+  const { data: stockData, isLoading: dataLoading } = useQuery({
+    queryKey: ["stockData", symbol],
+    queryFn: () => loadStockDataAsync(symbol),
+    staleTime: 180_000,
+    retry: 1,
+  });
+
+  if (dataLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Stock not found</h2>
-          <p className="text-muted-foreground">Analysis data not available for {symbol}</p>
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">Loading {symbol} data...</p>
         </div>
       </div>
     );
   }
 
-  const price = quote?.c || stockData.currentPrice;
+  if (!stockData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-2xl font-bold mb-2">Stock not found</h2>
+          <p className="text-muted-foreground">No data available for {symbol}. Try a different symbol.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const score = getStockScore(stockData);
+  const signal = getSignalLabel(score);
+  const isLimited = stockData.dataSource === "finnhub";
+
+  const price = quote?.c || stockData.currentPrice || 0;
   const change = quote?.dp || 0;
   const up = change >= 0;
+  const has52w = stockData.week52High > 0;
 
   return (
     <div className="min-h-screen pb-12">
@@ -56,9 +77,9 @@ function StockAnalyze() {
               {up ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
               {up ? "+" : ""}{change.toFixed(2)}% today
             </div>
-            <div className="text-sm text-muted-foreground mt-2">
-              52W High: ₹{stockData.week52High} | 52W Low: ₹{stockData.week52Low}
-            </div>
+            {has52w && <div className="text-sm text-muted-foreground mt-2">
+              52W High: ₹{stockData.week52High.toLocaleString("en-IN")} | 52W Low: ₹{stockData.week52Low.toLocaleString("en-IN")}
+            </div>}
           </div>
           
           {/* AI Score Circle */}
@@ -108,12 +129,17 @@ function StockAnalyze() {
               signal === "hold" ? "text-[var(--gold)]" :
               "text-[var(--bear)]"
             }`}>
-              {signal === "buy" ? "STRONG BUY" : signal === "hold" ? "HOLD" : "SELL"}
+              {signal === "buy" ? "BUY" : signal === "hold" ? "HOLD" : "SELL"}
             </div>
             <div className="text-sm text-muted-foreground">
-              Based on fundamental analysis & growth metrics
+              {isLimited ? "Based on available data from Finnhub" : "Based on fundamental analysis & growth metrics"}
             </div>
           </div>
+          {isLimited && (
+            <div className="ml-auto text-xs text-muted-foreground/60 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> Limited data
+            </div>
+          )}
         </motion.div>
       </div>
 
@@ -121,219 +147,242 @@ function StockAnalyze() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mx-6 mb-8">
         <MetricCard 
           label="P/E Ratio" 
-          value={`${stockData.currentPE.toFixed(1)}x`} 
+          value={stockData.currentPE > 0 ? `${stockData.currentPE.toFixed(1)}x` : "N/A"} 
           icon={PieChart}
           color="primary"
-          subtitle={stockData.currentPE < 20 ? "Undervalued" : stockData.currentPE < 30 ? "Fair" : "Premium"}
+          subtitle={stockData.currentPE > 0 ? (stockData.currentPE < 20 ? "Undervalued" : stockData.currentPE < 30 ? "Fair" : "Premium") : "No data"}
         />
         <MetricCard 
           label="Operating Margin" 
-          value={`${stockData.currentOPM.toFixed(1)}%`}
+          value={stockData.currentOPM > 0 ? `${stockData.currentOPM.toFixed(1)}%` : "N/A"}
           icon={Activity}
           color="bull"
-          subtitle={stockData.currentOPM > 25 ? "Excellent" : "Good"}
+          subtitle={stockData.currentOPM > 0 ? (stockData.currentOPM > 25 ? "Excellent" : "Good") : "No data"}
         />
         <MetricCard 
           label="EPS" 
-          value={`₹${stockData.currentEPS.toFixed(1)}`}
+          value={stockData.currentEPS > 0 ? `₹${stockData.currentEPS.toFixed(1)}` : "N/A"}
           icon={Award}
           color="gold"
-          subtitle="TTM"
+          subtitle={stockData.currentEPS > 0 ? "TTM" : "No data"}
         />
         <MetricCard 
           label="Dividend" 
-          value={`${stockData.currentDividendPayout.toFixed(0)}%`}
+          value={stockData.currentDividendPayout > 0 ? `${stockData.currentDividendPayout.toFixed(0)}%` : "N/A"}
           icon={TrendingUp}
           color="accent"
-          subtitle={stockData.currentDividendPayout > 50 ? "High Payout" : "Moderate"}
+          subtitle={stockData.currentDividendPayout > 0 ? (stockData.currentDividendPayout > 50 ? "High Payout" : "Moderate") : "No data"}
         />
       </div>
 
-      {/* Growth Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mx-6 mb-8">
-        <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary" />
-            Revenue & Profit Growth
-          </h3>
-          <div className="h-48 relative">
-            <GrowthChart 
-              revenueData={stockData.revenueGrowth} 
-              profitData={stockData.profitGrowth}
-            />
-          </div>
-          <div className="flex items-center gap-6 mt-4 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-primary" />
-              <span className="text-muted-foreground">Revenue Growth</span>
+      {!isLimited && (
+        /* Growth Charts */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-primary" />
+              Revenue & Profit Growth
+            </h3>
+            <div className="h-48 relative">
+              <GrowthChart 
+                revenueData={stockData.revenueGrowth} 
+                profitData={stockData.profitGrowth}
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-[var(--bull)]" />
-              <span className="text-muted-foreground">Profit Growth</span>
+            <div className="flex items-center gap-6 mt-4 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-primary" />
+                <span className="text-muted-foreground">Revenue Growth</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-[var(--bull)]" />
+                <span className="text-muted-foreground">Profit Growth</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary" />
-            P/E Ratio Trend
-          </h3>
-          <div className="h-48 relative">
-            <PEChart peData={stockData.peHistory} />
-          </div>
-          <div className="mt-4 p-3 rounded-xl bg-card/50">
-            <div className="text-sm">
-              <span className="text-muted-foreground">Trend: </span>
-              <span className={`font-semibold ${
-                stockData.trends.peTrend === "declining" ? "text-[var(--bull)]" :
-                stockData.trends.peTrend === "increasing" ? "text-[var(--bear)]" :
-                "text-[var(--gold)]"
-              }`}>
-                {stockData.trends.peTrend === "declining" ? "📉 Declining - Good sign" :
-                 stockData.trends.peTrend === "increasing" ? "📈 Increasing - Watch out" :
-                 "➡️ Stable"}
-              </span>
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              P/E Ratio Trend
+            </h3>
+            <div className="h-48 relative">
+              <PEChart peData={stockData.peHistory} />
+            </div>
+            <div className="mt-4 p-3 rounded-xl bg-card/50">
+              <div className="text-sm">
+                <span className="text-muted-foreground">Trend: </span>
+                <span className={`font-semibold ${
+                  stockData.trends.peTrend === "declining" ? "text-[var(--bull)]" :
+                  stockData.trends.peTrend === "increasing" ? "text-[var(--bear)]" :
+                  "text-[var(--gold)]"
+                }`}>
+                  {stockData.trends.peTrend === "declining" ? "Declining - Good sign" :
+                   stockData.trends.peTrend === "increasing" ? "Increasing - Watch out" :
+                   "Stable"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Key Insights */}
-      <div className="mx-6">
-        <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Target className="w-5 h-5 text-primary" />
-            AI Key Insights
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <InsightCard 
-              title="Valuation"
-              description={stockData.currentPE < 20 ? "Stock is undervalued with P/E below 20" : "Stock trading at premium valuations"}
-              positive={stockData.currentPE < 25}
-            />
-            <InsightCard 
-              title="Growth"
-              description={`${stockData.trends.salesGrowth}% YoY revenue growth`}
-              positive={stockData.trends.salesGrowth > 10}
-            />
-            <InsightCard 
-              title="Dividends"
-              description={`${stockData.currentDividendPayout.toFixed(0)}% payout - ${stockData.currentDividendPayout > 50 ? "Investor friendly" : "Growth focused"}`}
-              positive={stockData.currentDividendPayout > 40}
-            />
+      {!isLimited && (
+        /* Key Insights */
+        <div className="mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Target className="w-5 h-5 text-primary" />
+              AI Key Insights
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <InsightCard 
+                title="Valuation"
+                description={stockData.currentPE < 20 ? "Stock is undervalued with P/E below 20" : "Stock trading at premium valuations"}
+                positive={stockData.currentPE < 25}
+              />
+              <InsightCard 
+                title="Growth"
+                description={`${stockData.trends.salesGrowth}% YoY revenue growth`}
+                positive={stockData.trends.salesGrowth > 10}
+              />
+              <InsightCard 
+                title="Dividends"
+                description={`${stockData.currentDividendPayout.toFixed(0)}% payout - ${stockData.currentDividendPayout > 50 ? "Investor friendly" : "Growth focused"}`}
+                positive={stockData.currentDividendPayout > 40}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Theoretical Analysis - Graham Number & Fair Value */}
-      <div className="mx-6 mt-6">
-        <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Award className="w-5 h-5 text-primary" />
-            Value Investing Analysis
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <ValueMetric 
-              label="Graham Number"
-              value={`₹${calculateGrahamNumber(stockData).toFixed(0)}`}
-              tooltip="√(22.5 × EPS × Book Value per share) - Benjamin Graham's fair value"
-            />
-            <ValueMetric 
-              label="Fair Value (DCF)"
-              value={`₹${calculateFairValue(stockData).toFixed(0)}`}
-              tooltip="Discounted Cash Flow model - Intrinsic value based on cash flows"
-            />
-            <ValueMetric 
-              label="Margin of Safety"
-              value={`${calculateMarginOfSafety(stockData).toFixed(1)}%`}
-              tooltip="How much below intrinsic value the stock trades"
-              highlight={calculateMarginOfSafety(stockData) > 20}
-            />
-            <ValueMetric 
-              label="PEG Ratio"
-              value={calculatePEG(stockData).toFixed(2)}
-              tooltip="P/E divided by growth rate - <1 indicates undervaluation"
-              highlight={calculatePEG(stockData) < 1}
-            />
+      {!isLimited && stockData.currentEPS > 0 && (
+        /* Value Investing Analysis */
+        <div className="mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Award className="w-5 h-5 text-primary" />
+              Value Investing Analysis
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <ValueMetric 
+                label="Graham Number"
+                value={`₹${calculateGrahamNumber(stockData).toFixed(0)}`}
+                tooltip="√(22.5 × EPS × Book Value per share) - Benjamin Graham's fair value"
+              />
+              <ValueMetric 
+                label="Fair Value (DCF)"
+                value={`₹${calculateFairValue(stockData).toFixed(0)}`}
+                tooltip="Discounted Cash Flow model - Intrinsic value based on cash flows"
+              />
+              <ValueMetric 
+                label="Margin of Safety"
+                value={`${calculateMarginOfSafety(stockData).toFixed(1)}%`}
+                tooltip="How much below intrinsic value the stock trades"
+                highlight={calculateMarginOfSafety(stockData) > 20}
+              />
+              <ValueMetric 
+                label="PEG Ratio"
+                value={calculatePEG(stockData).toFixed(2)}
+                tooltip="P/E divided by growth rate - <1 indicates undervaluation"
+                highlight={calculatePEG(stockData) < 1}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Statistical Analysis */}
-      <div className="mx-6 mt-6">
-        <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary" />
-            Statistical Analysis
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatCard 
-              title="Revenue Stability"
-              value={`${calculateStability(stockData.revenueGrowth)}%`}
-              description="Coefficient of variation - lower is more stable"
-              positive={calculateStability(stockData.revenueGrowth) < 30}
-            />
-            <StatCard 
-              title="Profit Consistency"
-              value={`${calculateStability(stockData.profitGrowth)}%`}
-              description="Variability in profit growth - consistency score"
-              positive={calculateStability(stockData.profitGrowth) < 40}
-            />
-            <StatCard 
-              title="Margin Trend"
-              value={stockData.trends.opmTrend || "N/A"}
-              description={stockData.trends.opmTrend === "improving" ? "Operating margins expanding" : 
-                         stockData.trends.opmTrend === "declining" ? "Margin pressure detected" : "Stable margins"}
-              positive={stockData.trends.opmTrend === "improving" || stockData.trends.opmTrend === "stable"}
-            />
+      {!isLimited && (
+        /* Statistical Analysis */
+        <div className="mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-primary" />
+              Statistical Analysis
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard 
+                title="Revenue Stability"
+                value={stockData.revenueGrowth.length > 1 ? `${calculateStability(stockData.revenueGrowth).toFixed(1)}%` : "N/A"}
+                description="Coefficient of variation - lower is more stable"
+                positive={stockData.revenueGrowth.length > 1 && calculateStability(stockData.revenueGrowth) < 30}
+              />
+              <StatCard 
+                title="Profit Consistency"
+                value={stockData.profitGrowth.length > 1 ? `${calculateStability(stockData.profitGrowth).toFixed(1)}%` : "N/A"}
+                description="Variability in profit growth - consistency score"
+                positive={stockData.profitGrowth.length > 1 && calculateStability(stockData.profitGrowth) < 40}
+              />
+              <StatCard 
+                title="Margin Trend"
+                value={stockData.trends.opmTrend || "N/A"}
+                description={stockData.trends.opmTrend === "improving" ? "Operating margins expanding" : 
+                           stockData.trends.opmTrend === "declining" ? "Margin pressure detected" : "Stable margins"}
+                positive={stockData.trends.opmTrend === "improving" || stockData.trends.opmTrend === "stable"}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Educational Section */}
-      <div className="mx-6 mt-6">
-        <div className="rounded-3xl p-6 bg-gradient-card/50 border border-border/40">
-          <h3 className="font-semibold mb-4 flex items-center gap-2 text-muted-foreground">
-            <BookOpen className="w-5 h-5" />
-            Understanding the Metrics
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="p-4 rounded-xl bg-card/30">
-              <div className="font-medium mb-2 text-primary">P/E Ratio</div>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                Price-to-Earnings ratio measures how much investors pay per rupee of earnings. 
-                {stockData.symbol} at {stockData.currentPE.toFixed(1)}x means you pay ₹{stockData.currentPE.toFixed(1)} for every ₹1 of earnings. 
-                {stockData.currentPE < 20 ? "This is below average - potentially undervalued." : stockData.currentPE > 30 ? "This is above average - premium valuation." : "This is around average."}
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-card/30">
-              <div className="font-medium mb-2 text-primary">Operating Margin (OPM)</div>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                OPM shows profitability from core operations. {stockData.symbol} at {stockData.currentOPM.toFixed(1)}% is{" "}
-                {stockData.currentOPM > 30 ? "excellent - strong operational efficiency" : 
-                 stockData.currentOPM > 20 ? "good - healthy margins" : 
-                 "moderate - room for improvement"} - meaning ₹{stockData.currentOPM.toFixed(1)} of every ₹100 in revenue becomes operating profit.
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-card/30">
-              <div className="font-medium mb-2 text-primary">Graham Number</div>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                Derived from Benjamin Graham's formula: √(22.5 × EPS × Book Value). 
-                Current Graham Number: ₹{calculateGrahamNumber(stockData).toFixed(0)}. 
-                {calculateGrahamNumber(stockData) > stockData.currentPrice ? "Stock trades below Graham Number - potential value." : "Stock trades above Graham Number."}
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-card/30">
-              <div className="font-medium mb-2 text-primary">PEG Ratio</div>
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                P/E divided by growth rate adjusts P/E for growth. PEG &lt; 1 suggests undervaluation, 
-                &gt; 2 suggests overvaluation. {stockData.symbol} with {stockData.currentPE.toFixed(1)} P/E and ~{stockData.trends.salesGrowth.toFixed(0)}% growth = PEG {calculatePEG(stockData).toFixed(2)}
-              </p>
+      {!isLimited && (
+        /* Educational Section */
+        <div className="mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card/50 border border-border/40">
+            <h3 className="font-semibold mb-4 flex items-center gap-2 text-muted-foreground">
+              <BookOpen className="w-5 h-5" />
+              Understanding the Metrics
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="p-4 rounded-xl bg-card/30">
+                <div className="font-medium mb-2 text-primary">P/E Ratio</div>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Price-to-Earnings ratio measures how much investors pay per rupee of earnings. 
+                  {stockData.symbol} at {stockData.currentPE.toFixed(1)}x means you pay ₹{stockData.currentPE.toFixed(1)} for every ₹1 of earnings. 
+                  {stockData.currentPE < 20 ? "This is below average - potentially undervalued." : stockData.currentPE > 30 ? "This is above average - premium valuation." : "This is around average."}
+                </p>
+              </div>
+              <div className="p-4 rounded-xl bg-card/30">
+                <div className="font-medium mb-2 text-primary">Operating Margin (OPM)</div>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  OPM shows profitability from core operations. {stockData.symbol} at {stockData.currentOPM.toFixed(1)}% is{" "}
+                  {stockData.currentOPM > 30 ? "excellent - strong operational efficiency" : 
+                   stockData.currentOPM > 20 ? "good - healthy margins" : 
+                   "moderate - room for improvement"} - meaning ₹{stockData.currentOPM.toFixed(1)} of every ₹100 in revenue becomes operating profit.
+                </p>
+              </div>
+              <div className="p-4 rounded-xl bg-card/30">
+                <div className="font-medium mb-2 text-primary">Graham Number</div>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Derived from Benjamin Graham's formula: √(22.5 × EPS × Book Value). 
+                  Current Graham Number: ₹{calculateGrahamNumber(stockData).toFixed(0)}. 
+                  {calculateGrahamNumber(stockData) > stockData.currentPrice ? "Stock trades below Graham Number - potential value." : "Stock trades above Graham Number."}
+                </p>
+              </div>
+              <div className="p-4 rounded-xl bg-card/30">
+                <div className="font-medium mb-2 text-primary">PEG Ratio</div>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  P/E divided by growth rate adjusts P/E for growth. PEG &lt; 1 suggests undervaluation, 
+                  &gt; 2 suggests overvaluation. {stockData.symbol} with {stockData.currentPE.toFixed(1)} P/E and ~{stockData.trends.salesGrowth.toFixed(0)}% growth = PEG {calculatePEG(stockData).toFixed(2)}
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {isLimited && (
+        <div className="mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card/50 border border-border/40 text-center">
+            <AlertTriangle className="w-8 h-8 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-muted-foreground text-sm">
+              Limited data available for {stockData.symbol}. 
+              We're showing what we have from external sources. 
+              Add a CSV file for this stock to unlock full analysis with growth charts, trends, and value investing metrics.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

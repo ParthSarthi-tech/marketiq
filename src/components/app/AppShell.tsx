@@ -14,9 +14,11 @@ import {
   ChevronRight,
   Eye,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useState, useRef } from "react";
+import { useAuth, hasCompletedOnboarding } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { STOCK_CONFIG, getAllTickers, getStockName } from "@/lib/stockMetadata";
+import { toast } from "sonner";
 
 const nav: { to: string; label: string; icon: any; exact?: boolean }[] = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -41,8 +43,48 @@ export function AppShell() {
   }, [initialized, isAuthenticated, navigate]);
 
   useEffect(() => {
+    if (initialized && isAuthenticated && user && loc.pathname === "/app") {
+      hasCompletedOnboarding(user.id).then((onboarded) => {
+        if (!onboarded) {
+          navigate({ to: "/app/onboarding" });
+        }
+      });
+    }
+  }, [initialized, isAuthenticated, user?.id]);
+
+  useEffect(() => {
     const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ ticker: string; name: string }[]>([]);
+  const [showSearch, setShowSearch] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setShowSearch(false);
+      return;
+    }
+    const q = searchQuery.toLowerCase();
+    const results = getAllTickers()
+      .filter((t) => t.toLowerCase().includes(q) || getStockName(t).toLowerCase().includes(q))
+      .map((t) => ({ ticker: t, name: getStockName(t) }))
+      .slice(0, 6);
+    setSearchResults(results);
+    setShowSearch(results.length > 0);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSearch(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   if (loading || !initialized) {
@@ -84,7 +126,10 @@ export function AppShell() {
       <div aria-hidden className="fixed inset-0 -z-10 bg-background">
         <div className="absolute inset-0 grid-bg opacity-[0.12]" />
         <div className="absolute -top-40 -left-40 w-[600px] h-[600px] rounded-full blur-[140px] opacity-30 bg-gradient-primary" />
-        <div className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full blur-[160px] opacity-20" style={{ background: "var(--gold)" }} />
+        <div
+          className="absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full blur-[160px] opacity-20"
+          style={{ background: "var(--gold)" }}
+        />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,oklch(0.14_0.03_250/0.6)_100%)]" />
       </div>
 
@@ -107,7 +152,9 @@ export function AppShell() {
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold truncate">{userName}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">{riskProfile}</div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                  {riskProfile}
+                </div>
               </div>
             </div>
           </div>
@@ -121,7 +168,9 @@ export function AppShell() {
                   key={n.to}
                   to={n.to}
                   className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition group ${
-                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-card/50"
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-card/50"
                   }`}
                 >
                   {active && (
@@ -146,11 +195,19 @@ export function AppShell() {
                 Market open
               </div>
               <div className="mt-2 font-display text-2xl font-semibold tabular-nums">
-                {time.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
+                {time.toLocaleTimeString("en-IN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: false,
+                })}
               </div>
               <div className="text-[10px] text-muted-foreground">NSE · IST</div>
             </div>
-            <button onClick={handleSignOut} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/50 transition w-full">
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground hover:bg-card/50 transition w-full"
+            >
               <LogOut className="w-3.5 h-3.5" /> Sign out
             </button>
           </div>
@@ -171,22 +228,70 @@ export function AppShell() {
                 <ChevronRight className="w-3 h-3" />
                 <span className="text-foreground font-medium">{current}</span>
               </div>
-              <div className="flex-1 max-w-xl mx-auto relative hidden md:block">
+              <div ref={searchRef} className="flex-1 max-w-xl mx-auto relative hidden md:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
-                  placeholder="Search RELIANCE, mutual funds, lessons…"
+                  placeholder="Search RELIANCE, INFY, HDFCBANK…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => {
+                    if (searchResults.length > 0) setShowSearch(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchResults.length > 0) {
+                      navigate({ to: `/app/analyze/${searchResults[0].ticker}` });
+                      setShowSearch(false);
+                      setSearchQuery("");
+                    }
+                  }}
                   className="w-full bg-card/40 border border-border/60 rounded-xl pl-9 pr-4 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:shadow-[0_0_0_4px_color-mix(in_oklab,var(--primary)_15%,transparent)] transition"
                 />
+                <AnimatePresence>
+                  {showSearch && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className="absolute top-full left-0 right-0 mt-2 rounded-2xl bg-card border border-border/60 shadow-xl overflow-hidden z-50"
+                    >
+                      {searchResults.map((r) => (
+                        <button
+                          key={r.ticker}
+                          onClick={() => {
+                            navigate({ to: `/app/analyze/${r.ticker}` });
+                            setShowSearch(false);
+                            setSearchQuery("");
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-card/60 transition text-left"
+                        >
+                          <span className="font-mono text-xs text-primary">{r.ticker}</span>
+                          <span className="text-muted-foreground">{r.name}</span>
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
               <div className="ml-auto flex items-center gap-2">
-                <button className="relative w-9 h-9 rounded-xl glass flex items-center justify-center hover:bg-card/60 transition">
+                <button
+                  onClick={() =>
+                    toast.info("No new notifications. We'll alert you when there's an update.")
+                  }
+                  className="relative w-9 h-9 rounded-xl glass flex items-center justify-center hover:bg-card/60 transition"
+                >
                   <Bell className="w-4 h-4" />
                   <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--gold)] animate-pulse-dot" />
                 </button>
-                <button className="w-9 h-9 rounded-xl glass flex items-center justify-center hover:bg-card/60 transition">
+                <button
+                  onClick={() => navigate({ to: "/app/settings" })}
+                  className="w-9 h-9 rounded-xl glass flex items-center justify-center hover:bg-card/60 transition"
+                >
                   <Settings className="w-4 h-4" />
                 </button>
-                <Link to="/app/onboarding" className="hidden sm:inline-flex bg-gradient-primary text-primary-foreground text-xs font-semibold px-4 py-2 rounded-xl shadow-glow hover:opacity-90 transition">
+                <Link
+                  to="/app/onboarding"
+                  className="hidden sm:inline-flex bg-gradient-primary text-primary-foreground text-xs font-semibold px-4 py-2 rounded-xl shadow-glow hover:opacity-90 transition"
+                >
                   Retake quiz
                 </Link>
               </div>

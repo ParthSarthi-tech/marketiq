@@ -93,7 +93,7 @@ function FeaturesPage() {
       <Ticker />
 
       {/* Pillars */}
-      <section className="relative py-28">
+      <section id="pillars" className="relative py-28">
         <div className="mx-auto max-w-7xl px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -200,7 +200,7 @@ function FeaturesPage() {
             <Link to="/sign-up" className="bg-gradient-primary text-primary-foreground text-sm font-semibold px-7 py-3.5 rounded-full hover:opacity-90 transition shadow-glow inline-flex items-center gap-2">
               Create free account <ArrowRight className="w-4 h-4" />
             </Link>
-            <Link to="/" className="glass text-sm font-medium px-7 py-3.5 rounded-full hover:bg-card/70 transition">
+            <Link to="/how-it-works" className="glass text-sm font-medium px-7 py-3.5 rounded-full hover:bg-card/70 transition">
               Take a demo
             </Link>
           </div>

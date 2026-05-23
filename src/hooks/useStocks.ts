@@ -15,7 +15,7 @@ import {
   INDEX_KEYS,
   getAllTickers,
 } from "@/lib/stockMetadata";
-import { resolveAllInstrumentKeys, getResolvedKey } from "@/lib/instrumentResolver";
+import { resolveAllInstrumentKeys, getResolvedKey, resolveAnyKey } from "@/lib/instrumentResolver";
 import { subscribeToStocks, type TickData, type MarketInfo } from "@/lib/marketStream";
 
 export type { StockQuote, InstrumentSearchResult };
@@ -29,13 +29,11 @@ export function useStockQuote(symbol: string) {
   const { data: initialQuote, isLoading } = useQuery({
     queryKey: ["upstox_quote", symbol],
     queryFn: async (): Promise<StockQuote | null> => {
-      const key = getResolvedKey(symbol);
+      let key = getResolvedKey(symbol);
       if (!key) {
-        const keys = await resolveAllInstrumentKeys();
-        const resolved = keys[symbol];
-        if (!resolved) return null;
-        return getStockQuote(resolved, symbol);
+        key = await resolveAnyKey(symbol);
       }
+      if (!key) return null;
       return getStockQuote(key, symbol);
     },
     enabled: !!symbol,
@@ -49,10 +47,9 @@ export function useStockQuote(symbol: string) {
     if (!symbol) return;
 
     const fetchKey = async () => {
-      const key = getResolvedKey(symbol);
+      let key = getResolvedKey(symbol);
       if (!key) {
-        const keys = await resolveAllInstrumentKeys();
-        return keys[symbol];
+        key = await resolveAnyKey(symbol);
       }
       return key;
     };

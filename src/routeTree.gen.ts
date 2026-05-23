@@ -19,6 +19,7 @@ import { Route as AiAdvisorRouteImport } from './routes/ai-advisor'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppWatchlistRouteImport } from './routes/app.watchlist'
+import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppOnboardingRouteImport } from './routes/app.onboarding'
 import { Route as AppLearnRouteImport } from './routes/app.learn'
@@ -76,6 +77,11 @@ const AppWatchlistRoute = AppWatchlistRouteImport.update({
   path: '/watchlist',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPortfolioRoute = AppPortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/app/learn': typeof AppLearnRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/settings': typeof AppSettingsRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
   '/app/analyze/$symbol': typeof AppAnalyzeSymbolRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/app/learn': typeof AppLearnRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/settings': typeof AppSettingsRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app': typeof AppIndexRoute
   '/app/analyze/$symbol': typeof AppAnalyzeSymbolRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/app/learn': typeof AppLearnRoute
   '/app/onboarding': typeof AppOnboardingRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/settings': typeof AppSettingsRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
   '/app/analyze/$symbol': typeof AppAnalyzeSymbolRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/app/learn'
     | '/app/onboarding'
     | '/app/portfolio'
+    | '/app/settings'
     | '/app/watchlist'
     | '/app/'
     | '/app/analyze/$symbol'
@@ -194,6 +204,7 @@ export interface FileRouteTypes {
     | '/app/learn'
     | '/app/onboarding'
     | '/app/portfolio'
+    | '/app/settings'
     | '/app/watchlist'
     | '/app'
     | '/app/analyze/$symbol'
@@ -212,6 +223,7 @@ export interface FileRouteTypes {
     | '/app/learn'
     | '/app/onboarding'
     | '/app/portfolio'
+    | '/app/settings'
     | '/app/watchlist'
     | '/app/'
     | '/app/analyze/$symbol'
@@ -300,6 +312,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWatchlistRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/settings': {
+      id: '/app/settings'
+      path: '/settings'
+      fullPath: '/app/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/portfolio': {
       id: '/app/portfolio'
       path: '/portfolio'
@@ -351,6 +370,7 @@ interface AppRouteChildren {
   AppLearnRoute: typeof AppLearnRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
+  AppSettingsRoute: typeof AppSettingsRoute
   AppWatchlistRoute: typeof AppWatchlistRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAnalyzeSymbolRoute: typeof AppAnalyzeSymbolRoute
@@ -362,6 +382,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppLearnRoute: AppLearnRoute,
   AppOnboardingRoute: AppOnboardingRoute,
   AppPortfolioRoute: AppPortfolioRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppWatchlistRoute: AppWatchlistRoute,
   AppIndexRoute: AppIndexRoute,
   AppAnalyzeSymbolRoute: AppAnalyzeSymbolRoute,

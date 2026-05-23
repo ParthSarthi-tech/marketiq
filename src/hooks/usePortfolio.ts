@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getUserPortfolio, addToPortfolio, removeFromPortfolio, addTransaction, getUserCashBalance } from "@/lib/db";
 import { getQuotesBatch, type StockQuote } from "@/lib/upstox";
-import { getResolvedKey } from "@/lib/instrumentResolver";
+import { resolveAnyKey } from "@/lib/instrumentResolver";
 import type { Portfolio } from "@/lib/supabase";
 
 export interface PortfolioHolding extends Portfolio {
@@ -26,14 +26,21 @@ export function usePortfolio(userId: string | null) {
   const { data: quotes = {}, isLoading: quotesLoading } = useQuery({
     queryKey: ["quotes", holdings.map((h) => h.ticker)],
     queryFn: async () => {
-      const keys = holdings.map(h => getResolvedKey(h.ticker)).filter(Boolean) as string[];
+      const tickerToKey: Record<string, string> = {};
+      const keys: string[] = [];
+      for (const h of holdings) {
+        const key = await resolveAnyKey(h.ticker);
+        if (key) {
+          tickerToKey[h.ticker] = key;
+          keys.push(key);
+        }
+      }
       if (keys.length === 0) return {};
       const fetched = await getQuotesBatch(keys);
       const quotesMap: Record<string, StockQuote> = {};
-      for (const h of holdings) {
-        const key = getResolvedKey(h.ticker);
-        if (key && fetched[key]) {
-          quotesMap[h.ticker] = fetched[key];
+      for (const [ticker, key] of Object.entries(tickerToKey)) {
+        if (fetched[key]) {
+          quotesMap[ticker] = fetched[key];
         }
       }
       return quotesMap;

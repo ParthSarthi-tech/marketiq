@@ -15,7 +15,7 @@ export interface AIContext {
   cashBalance: number;
 }
 
-function buildSystemPrompt(context: AIContext): string {
+export function buildSystemPrompt(context: AIContext): string {
   const profile = context.userProfile;
   const riskProfile = profile
     ? `${profile.risk_appetite} risk tolerance, ${profile.time_horizon} time horizon, goal: ${profile.goal}`
