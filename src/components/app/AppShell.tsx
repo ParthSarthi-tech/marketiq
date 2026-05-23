@@ -18,6 +18,7 @@ import { useEffect, useState, useRef } from "react";
 import { useAuth, hasCompletedOnboarding } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { STOCK_CONFIG, getAllTickers, getStockName } from "@/lib/stockMetadata";
+import { DisclosureFooter } from "@/components/DisclosureFooter";
 import { toast } from "sonner";
 
 const nav: { to: string; label: string; icon: any; exact?: boolean }[] = [
@@ -310,6 +311,7 @@ export function AppShell() {
                 <Outlet />
               </motion.div>
             </AnimatePresence>
+            {loc.pathname !== "/app/onboarding" && loc.pathname !== "/app/settings" && <DisclosureFooter />}
           </main>
         </div>
       </div>

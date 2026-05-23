@@ -35,9 +35,12 @@ function Advisor() {
   
   const [input, setInput] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [messages, isLoading]);
 
   const send = async (text: string) => {
@@ -64,7 +67,7 @@ function Advisor() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4">
           {messages.map((m, i) => (
             <motion.div
               key={i}
@@ -75,7 +78,7 @@ function Advisor() {
               <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 m.role === "user"
                   ? "bg-gradient-primary text-primary-foreground rounded-tr-sm shadow-glow"
-                  : "bg-card/60 border border-border/40 rounded-tl-sm"
+                  : "bg-card/60 border border-border/40 rounded-tl-sm text-foreground"
               }`}>
                 {m.content}
               </div>

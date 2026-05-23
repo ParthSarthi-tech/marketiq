@@ -11,50 +11,74 @@ interface ChatResult {
   error?: string;
 }
 
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"];
+
+async function trySendMessage(
+  apiKey: string,
+  contents: unknown[],
+  modelIndex: number
+): Promise<{ text?: string; error?: string }> {
+  if (modelIndex >= GEMINI_MODELS.length) {
+    return { error: "All AI models failed. Please try again later." };
+  }
+
+  const model = GEMINI_MODELS[modelIndex];
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents }),
+      }
+    );
+
+    if (response.status === 404 || response.status === 429) {
+      return trySendMessage(apiKey, contents, modelIndex + 1);
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
+      const msg = errorBody?.error?.message || `API returned status ${response.status}`;
+      return { error: `AI request failed: ${msg}` };
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      return { error: "AI returned an empty response. Try rephrasing your question." };
+    }
+
+    return { text };
+  } catch (err) {
+    return trySendMessage(apiKey, contents, modelIndex + 1);
+  }
+}
+
 export const chatWithAI = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => data as ChatPayload)
   .handler(async (ctx): Promise<ChatResult> => {
-    const { message, systemPrompt, history } = ctx.data;
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return { error: "AI service is not configured. Please set GEMINI_API_KEY in your environment." };
-    }
-
-    const contents = [
-      { role: "user", parts: [{ text: systemPrompt }] },
-      ...history.map((m) => ({
-        role: m.role,
-        parts: [{ text: m.content }],
-      })),
-      { role: "user", parts: [{ text: message }] },
-    ];
-
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents }),
-        }
-      );
+      const { message, systemPrompt, history } = ctx.data;
+      const apiKey = process.env.GEMINI_API_KEY;
 
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null);
-        const msg = errorBody?.error?.message || `API returned status ${response.status}`;
-        return { error: `AI request failed: ${msg}` };
+      if (!apiKey) {
+        return { error: "AI service is not configured. Please set GEMINI_API_KEY in your environment." };
       }
 
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const contents = [
+        { role: "user", parts: [{ text: systemPrompt }] },
+        ...history.map((m) => ({
+          role: m.role,
+          parts: [{ text: m.content }],
+        })),
+        { role: "user", parts: [{ text: message }] },
+      ];
 
-      if (!text) {
-        return { error: "AI returned an empty response. Try rephrasing your question." };
-      }
-
-      return { text };
+      return await trySendMessage(apiKey, contents, 0);
     } catch (err) {
-      return { error: "Network error while contacting AI service. Please try again." };
+      console.error("[AIProxy] Unhandled handler error:", err);
+      return { error: "AI service encountered an internal error. Please try again." };
     }
   });

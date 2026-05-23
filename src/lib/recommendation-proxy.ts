@@ -1,5 +1,31 @@
 import { createServerFn } from "@tanstack/react-start";
 import { STOCK_CONFIG, getAllTickers, getStockTags } from "./stockMetadata";
+import { getFundamentals } from "./fundamentals";
+
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"];
+
+async function tryGenerateContent(
+  apiKey: string,
+  body: unknown,
+  modelIndex: number
+): Promise<Response | null> {
+  if (modelIndex >= GEMINI_MODELS.length) return null;
+  const model = GEMINI_MODELS[modelIndex];
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+    if (response.status === 404 || response.status === 429) return tryGenerateContent(apiKey, body, modelIndex + 1);
+    return response;
+  } catch {
+    return tryGenerateContent(apiKey, body, modelIndex + 1);
+  }
+}
 
 export interface RecommendationSignal {
   tag: string;
@@ -156,23 +182,24 @@ function getLocalRecommendations(input: RecommendationInput): RecommendationSign
 export const getRecommendations = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => data as RecommendationInput)
   .handler(async (ctx): Promise<RecommendationResult> => {
-    const {
-      riskAppetite,
-      goal,
-      timeHorizon,
-      knowledgeLevel,
-      sectorPreferences,
-      holdings,
-      cashBalance,
-      totalPortfolioValue,
-    } = ctx.data;
+    try {
+      const {
+        riskAppetite,
+        goal,
+        timeHorizon,
+        knowledgeLevel,
+        sectorPreferences,
+        holdings,
+        cashBalance,
+        totalPortfolioValue,
+      } = ctx.data;
 
-    const localResult = getLocalRecommendations(ctx.data);
+      const localResult = getLocalRecommendations(ctx.data);
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return { signals: localResult, source: "local" };
-    }
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return { signals: localResult, source: "local" };
+      }
 
     const riskLabel = RISK_MAP[riskAppetite] || "moderate-aggressive";
     const knowledgeLabel = KNOWLEDGE_MAP[knowledgeLevel] || "intermediate";
@@ -204,6 +231,18 @@ ${holdingsText}
 ${cashText}
 ${totalText}
 
+FUNDAMENTALS:
+${(holdings || []).map((h) => {
+  const f = getFundamentals(h.ticker);
+  if (!f) return "";
+  const parts = [`- ${h.ticker}: Sales ₹${(f.sales / 100).toFixed(1)}L Cr`];
+  if (f.pe > 0) parts.push(`P/E ${f.pe.toFixed(1)}`);
+  if (f.opm > 0) parts.push(`OPM ${f.opm.toFixed(1)}%`);
+  if (f.eps > 0) parts.push(`EPS ₹${f.eps.toFixed(2)}`);
+  if (f.salesGrowth3Y != null) parts.push(`3Y Sales Gr. ${f.salesGrowth3Y.toFixed(1)}%`);
+  return parts.join(" | ");
+}).filter(Boolean).join("\n")}
+
 Based on this profile, generate exactly 3 personalized investment signals. Each signal must include:
 - tag: one of "Strong buy", "Buy", "Hold", "Rebalance", "Watch", "Trim", or "Sell"
 - title: a short actionable title (max 50 chars)
@@ -214,20 +253,19 @@ Return ONLY valid JSON with this structure, no markdown wrapping, no explanation
 {"signals":[{"tag":"...","title":"...","note":"...","confidence":85}]}`;
 
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      const response = await tryGenerateContent(
+        apiKey,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 1024,
-            },
-          }),
+          contents: [{ role: "user", parts: [{ text: systemPrompt }] }],
+          generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
         },
+        0
       );
+
+      if (!response) {
+        console.warn("[RecommendationProxy] All AI models failed");
+        return { signals: localResult, source: "local" };
+      }
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null);
@@ -263,10 +301,11 @@ Return ONLY valid JSON with this structure, no markdown wrapping, no explanation
       return { signals: validatedSignals, source: "ai" };
     } catch (err) {
       console.warn("[RecommendationProxy] Error:", err);
-      return {
-        signals: localResult,
-        error: err instanceof Error ? err.message : "Unknown error",
-        source: "local",
-      };
+      return { signals: localResult, error: err instanceof Error ? err.message : "Unknown error", source: "local" };
     }
+  } catch (err) {
+    console.warn("[RecommendationProxy] Unhandled handler error:", err);
+    const localResult = getLocalRecommendations(ctx.data);
+    return { signals: localResult, error: err instanceof Error ? err.message : "Unknown error", source: "local" };
+  }
   });
