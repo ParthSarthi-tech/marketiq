@@ -281,20 +281,16 @@ function extractSymbolFromKey(key: string): string {
 
 import { getResolvedKeyBySymbol } from "./instrumentResolver";
 
-export async function getQuotesBatch(
-  instrumentKeys: string[]
+const BATCH_SIZE = 5;
+
+async function fetchQuoteChunk(
+  chunk: string[]
 ): Promise<Record<string, StockQuote>> {
-  if (instrumentKeys.length === 0) return {};
-
-  console.log("[getQuotesBatch] Fetching for keys:", instrumentKeys.slice(0, 5).join(", "));
-
-  const keysParam = instrumentKeys.map((k) => encodeURIComponent(k)).join(",");
+  const keysParam = chunk.map((k) => encodeURIComponent(k)).join(",");
   const url = `${UPSTOX_V2_URL}/market-quote/quotes?instrument_key=${keysParam}`;
 
-  const cacheKey = `fullquote_batch_${instrumentKeys.slice(0, 5).join("_")}`;
+  const cacheKey = `fullquote_chunk_${chunk.slice(0, 3).join("_")}`;
   const data = await upstoxFetch<FullQuoteResponse>(url, cacheKey);
-
-  console.log("[getQuotesBatch] Raw response data keys:", Object.keys(data.data || {}).slice(0, 5));
 
   const result: Record<string, StockQuote> = {};
 
@@ -308,7 +304,7 @@ export async function getQuotesBatch(
       const changePercent = close ? (change / close) * 100 : 0;
 
       result[originalKey] = {
-        symbol: symbol,
+        symbol,
         lastPrice: quote.last_price,
         change,
         changePercent,
@@ -321,8 +317,32 @@ export async function getQuotesBatch(
     }
   }
 
-  console.log("[getQuotesBatch] Returning result keys:", Object.keys(result).slice(0, 5));
   return result;
+}
+
+export async function getQuotesBatch(
+  instrumentKeys: string[]
+): Promise<Record<string, StockQuote>> {
+  if (instrumentKeys.length === 0) return {};
+
+  console.log("[getQuotesBatch] Total keys:", instrumentKeys.length);
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < instrumentKeys.length; i += BATCH_SIZE) {
+    chunks.push(instrumentKeys.slice(i, i + BATCH_SIZE));
+  }
+
+  console.log("[getQuotesBatch] Splitting into", chunks.length, "batches of", BATCH_SIZE);
+
+  const results = await Promise.all(chunks.map(fetchQuoteChunk));
+
+  const merged: Record<string, StockQuote> = {};
+  for (const r of results) {
+    Object.assign(merged, r);
+  }
+
+  console.log("[getQuotesBatch] Merged result keys:", Object.keys(merged).length);
+  return merged;
 }
 
 export async function getStockQuote(

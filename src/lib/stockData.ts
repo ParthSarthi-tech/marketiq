@@ -1,7 +1,6 @@
 import { getCsvFile, STOCK_CONFIG } from "./stockMetadata";
-import { fetchFinnhubData } from "./finnhub-proxy";
 
-export type DataSource = "csv" | "hardcoded" | "finnhub";
+export type DataSource = "csv" | "hardcoded";
 
 export interface StockData {
   symbol: string;
@@ -25,7 +24,15 @@ export interface StockData {
     peTrend: "declining" | "stable" | "increasing";
     opmTrend: "improving" | "stable" | "declining";
   };
-  dataSource: DataSource;
+  dataSource?: DataSource;
+  pbRatio?: number;
+  roeTTM?: number;
+  roaTTM?: number;
+  currentRatio?: number;
+  debtToEquity?: number;
+  netProfitMargin?: number;
+  priceAvg50?: number;
+  priceAvg200?: number;
 }
 
 const csvCache = new Map<string, StockData>();
@@ -78,14 +85,15 @@ function parseCSVData(csvText: string, symbol: string): StockData | null {
 
   if (!data["Sales"] || !data["EPS"]) return null;
 
-  const parseNumber = (val: string): number => {
+  const parseNumber = (val: string | number): number => {
+    if (typeof val === "number") return val;
     const num = parseFloat(val.replace(/%/g, ""));
     return isNaN(num) ? 0 : num;
   };
 
-  const getLatestValue = (arr: string[]): number => {
+  const getLatestValue = (arr: (string | number)[]): number => {
     for (let i = arr.length - 1; i >= 0; i--) {
-      const val = parseNumber(arr[i]);
+      const val = parseNumber(String(arr[i]));
       if (val > 0) return val;
     }
     return 0;
@@ -154,7 +162,7 @@ const STOCK_FUNDAMENTALS: Record<string, StockData> = {
     opmHistory: [26.2, 26.5, 26.8, 27.2, 27.5, 27.2, 27.0, 27.1],
     trends: { salesGrowth: 18.5, peTrend: "declining", opmTrend: "stable"  },
   },
-HDFCRELIANCE: {
+RELIANCE: {
     symbol: "RELIANCE", companyName: "Reliance Industries",
     currentSales: 987000, currentOPM: 14.2, currentPE: 28.5, currentEPS: 102.5,
     currentPrice: 2920.0, currentDividendPayout: 35.0,
@@ -383,54 +391,6 @@ export function loadStockData(symbol: string): StockData | null {
   return null;
 }
 
-function buildFromFinnhub(symbol: string, result: import("./finnhub-proxy").FinnhubResult): StockData | null {
-  const { profile, metric } = result;
-  if (!metric?.peTTM && !metric?.epsTTM) return null;
-
-  const name = profile?.name || symbol;
-  const sector = profile?.sector || "Other";
-  const mc = profile?.marketCap
-    ? `₹${(profile.marketCap / 100).toFixed(1)}L Cr`
-    : "N/A";
-
-  const currentPE = metric.peTTM || 0;
-  const currentEPS = metric.epsTTM || 0;
-  const currentDividend = metric.dividendYield
-    ? parseFloat((metric.dividendYield * 100).toFixed(1))
-    : 0;
-  const currentOPM = metric.operatingMargin
-    ? parseFloat((metric.operatingMargin * 100).toFixed(1))
-    : 0;
-  const currentPrice = 0;
-  const week52High = metric.high52 || 0;
-  const week52Low = metric.low52 || 0;
-
-  return {
-    symbol,
-    companyName: name,
-    currentSales: metric.revenueTTM || 0,
-    currentOPM,
-    currentPE,
-    currentEPS,
-    currentPrice,
-    currentDividendPayout: currentDividend,
-    sector,
-    marketCap: mc,
-    week52High: Math.round(week52High),
-    week52Low: Math.round(week52Low),
-    revenueGrowth: metric.revenueGrowth ? [metric.revenueGrowth] : [],
-    profitGrowth: [],
-    peHistory: [currentPE],
-    opmHistory: currentOPM > 0 ? [currentOPM] : [],
-    trends: {
-      salesGrowth: metric.revenueGrowth || 0,
-      peTrend: "stable",
-      opmTrend: "stable",
-    },
-    dataSource: "finnhub",
-  };
-}
-
 export async function loadStockDataAsync(symbol: string): Promise<StockData | null> {
   const upperSymbol = symbol.toUpperCase();
   
@@ -446,19 +406,6 @@ export async function loadStockDataAsync(symbol: string): Promise<StockData | nu
   const hardcoded = STOCK_FUNDAMENTALS[upperSymbol];
   if (hardcoded) {
     return { ...hardcoded, dataSource: "hardcoded" };
-  }
-
-  try {
-    const finnhubResult = await fetchFinnhubData({ data: { ticker: upperSymbol } });
-    if (finnhubResult && !finnhubResult.error) {
-      const built = buildFromFinnhub(upperSymbol, finnhubResult);
-      if (built) {
-        csvCache.set(upperSymbol, built);
-        return built;
-      }
-    }
-  } catch (e) {
-    console.warn(`[stockData] Finnhub fetch failed for ${upperSymbol}:`, e);
   }
 
   return null;
@@ -576,6 +523,3 @@ function getOPMComment(opm: number): string {
   return "(Weak)";
 }
 
-export function getAllAvailableStocks(): string[] {
-  return Object.keys(STOCK_FUNDAMENTALS);
-}

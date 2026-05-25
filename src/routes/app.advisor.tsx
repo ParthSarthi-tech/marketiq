@@ -52,7 +52,7 @@ function Advisor() {
   const userName = user?.email?.split("@")[0] || "there";
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 h-[calc(100vh-180px)]">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 h-[calc(100vh-100px)]">
       {/* Chat panel */}
       <div className="rounded-3xl bg-gradient-card border border-border/60 flex flex-col overflow-hidden">
         <div className="flex items-center gap-3 p-5 border-b border-border/40">

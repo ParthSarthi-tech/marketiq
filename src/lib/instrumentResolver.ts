@@ -80,7 +80,13 @@ export async function resolveAllInstrumentKeys(): Promise<Record<string, string>
         results[ticker] = key;
         console.log(`[InstrumentResolver] ${ticker} → ${key}`);
       } else {
-        console.warn(`[InstrumentResolver] Could not resolve: ${ticker}`);
+        const fallbackKey = await resolveAnyKey(ticker);
+        if (fallbackKey) {
+          results[ticker] = fallbackKey;
+          console.log(`[InstrumentResolver] ${ticker} → ${fallbackKey} (via resolveAnyKey)`);
+        } else {
+          console.warn(`[InstrumentResolver] Could not resolve: ${ticker}`);
+        }
       }
       await new Promise((r) => setTimeout(r, 200));
     } catch (e) {

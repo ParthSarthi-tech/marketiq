@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useIndianStocks, useStockSearch } from "@/hooks/useStocks";
 import { useWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/useWatchlist";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { getAIInsight, getStockScore, getSignalLabel, loadStockData } from "@/lib/stockData";
+import { loadStockData } from "@/lib/stockData";
 
 function getDeterministicSparkline(symbol: string): number[] {
   const stockData = loadStockData(symbol);
@@ -34,23 +34,7 @@ const filters = [
   { id: "momentum", label: "Momentum", icon: Flame },
 ];
 
-const STOCK_THESIS: Record<string, { thesis: string; tags: string[] }> = {
-  LT: { thesis: "Largest infra play. Capex cycle + order book at all-time high.", tags: ["growth", "momentum"] },
-  TCS: { thesis: "IT giant with strong domestic presence and AI/Cloud focus.", tags: ["growth"] },
-  RELIANCE: { thesis: "Energy to retail conglomerate. EBITDA growth strong.", tags: ["growth", "defensive"] },
-  HDFCBANK: { thesis: "Largest private sector bank. Credit growth robust.", tags: ["defensive"] },
-  INFY: { thesis: "Global IT services leader. AI and cloud transformation play.", tags: ["growth"] },
-  TITAN: { thesis: "Jewellery dominance + wedding season tailwinds.", tags: ["growth"] },
-  SBIN: { thesis: "Largest PSU bank. Market share gains + NIM improvement.", tags: ["defensive"] },
-  BAJFINANCE: { thesis: "NBFC leader. Strong asset quality and growth.", tags: ["momentum"] },
-  ITC: { thesis: "FMCG + hotels + cigarettes. Steady dividend payer.", tags: ["defensive"] },
-  SUNPHARMA: { thesis: "Specialty pharma leader. US FDA pipeline improving.", tags: ["defensive"] },
-  BHARTIARTL: { thesis: "Telecom leader. ARPU expansion and 5G monetisation.", tags: ["growth", "defensive"] },
-  AXISBANK: { thesis: "Private sector bank. Credit growth + improving NIMs.", tags: ["defensive"] },
-  KOTAKBANK: { thesis: "Premium private bank. Strong liability franchise.", tags: ["defensive"] },
-  MARUTI: { thesis: "Maruti Suzuki - Market leader in passenger vehicles.", tags: ["growth"] },
-  ADANIPORTS: { thesis: "India's largest private port operator. Cargo volumes up.", tags: ["momentum"] },
-};
+
 
 function Discover() {
   const { user } = useAuth();
@@ -59,8 +43,13 @@ function Discover() {
   const { data: watchlist = [] } = useWatchlist(user?.id ?? null);
   const addToWatchlist = useAddToWatchlist();
   const removeFromWatchlist = useRemoveFromWatchlist();
+
+  const riskProfile = profile?.risk_appetite || "med-high";
+  const userGoal = profile?.goal || "wealth";
   
-  const [active, setActive] = useState("all");
+  const defaultFilter = riskProfile === "low" ? "defensive" : riskProfile === "high" ? "growth" : "all";
+  
+  const [active, setActive] = useState(defaultFilter);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   
@@ -68,11 +57,9 @@ function Discover() {
 
   const watchlistTickers = new Set(watchlist.map(w => w.ticker));
 
-  const getStockTags = (ticker: string) => STOCK_THESIS[ticker]?.tags || ["growth"];
-
   const filteredStocks = allStocks?.filter(s => {
-    const tags = getStockTags(s.symbol);
-    if (active === "all") return true;
+    const tags = s.tags || [];
+    if (active === "all") return s.featured;
     return tags.includes(active);
   }) || [];
 
@@ -85,7 +72,6 @@ function Discover() {
     }
   };
 
-  const riskProfile = profile?.risk_appetite || "med-high";
   const getMatchScore = () => Math.floor(70 + Math.random() * 30);
 
   return (
@@ -93,7 +79,7 @@ function Discover() {
       <PageHeader
         eyebrow="Discover"
         title={<>Stocks picked <span className="text-gradient">for you</span>.</>}
-        subtitle={`${filteredStocks.length} recommendations for your ${riskProfile === "high" ? "aggressive" : riskProfile === "med-high" ? "moderate-aggressive" : riskProfile === "med-low" ? "moderate" : "conservative"} profile`}
+        subtitle={`${filteredStocks.length} picks matched to your ${riskProfile === "high" ? "aggressive" : riskProfile === "med-high" ? "moderate-aggressive" : riskProfile === "med-low" ? "moderate" : "conservative"} profile`}
         action={
           <button 
             onClick={() => setShowSearch(!showSearch)}
@@ -182,7 +168,6 @@ function Discover() {
           {filteredStocks.map((s, i) => {
             const inWatchlist = watchlistTickers.has(s.symbol);
             const up = (s.quote?.dp || 0) >= 0;
-            const thesisData = STOCK_THESIS[s.symbol] || { thesis: "Strong fundamentals and market position.", tags: ["growth"] };
             const match = getMatchScore();
             
             return (
@@ -223,7 +208,7 @@ function Discover() {
                   </div>
                 </div>
 
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4 relative">{thesisData.thesis}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-4 relative">{s.thesis}</p>
 
                 <div className="flex gap-2 relative">
                   <Link 

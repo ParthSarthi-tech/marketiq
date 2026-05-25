@@ -123,7 +123,7 @@ function Dashboard() {
     })) || [];
 
   return (
-    <div>
+    <div className="relative">
       <PageHeader
         eyebrow={`Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, ${userName}`}
         title={
@@ -146,7 +146,12 @@ function Dashboard() {
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+        className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
+      >
         {hasHoldings ? (
           <StatCard
             label="Portfolio value"
@@ -245,11 +250,16 @@ function Dashboard() {
           delta="available"
           trend="up"
         />
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* AI signals */}
-        <div className="lg:col-span-2 rounded-3xl p-6 bg-gradient-card border border-border/60">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="lg:col-span-2 rounded-3xl p-6 bg-gradient-card border border-border/40 border-rotate overflow-hidden"
+        >
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow">
@@ -349,10 +359,15 @@ function Dashboard() {
               </div>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Quick actions */}
-        <div className="space-y-4">
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.25 }}
+          className="space-y-4"
+        >
           <Link
             to="/app/discover"
             className="block rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition group"
@@ -400,11 +415,16 @@ function Dashboard() {
               <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
             </div>
           </Link>
-        </div>
+        </motion.div>
       </div>
 
       {/* Market movers */}
-      <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.35 }}
+        className="rounded-3xl p-6 bg-gradient-card border border-border/60"
+      >
         <div className="flex items-center justify-between mb-4">
           <div>
             <div className="font-semibold flex items-center gap-2">
@@ -449,7 +469,7 @@ function Dashboard() {
             </motion.div>
           ))}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
@@ -19,16 +19,44 @@ export function PageHeader({ eyebrow, title, subtitle, action }: { eyebrow?: str
 
 export function StatCard({ label, value, delta, trend = "up", spark }: { label: string; value: ReactNode; delta?: string; trend?: "up" | "down"; spark?: number[] }) {
   const positive = trend === "up";
+  const ref = useRef<HTMLDivElement>(null);
+  const rotateX = useMotionValue(0);
+  const rotateY = useMotionValue(0);
+  const springX = useSpring(rotateX, { stiffness: 300, damping: 30 });
+  const springY = useSpring(rotateY, { stiffness: 300, damping: 30 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const midX = rect.width / 2;
+    const midY = rect.height / 2;
+    rotateY.set(((x - midX) / midX) * 6);
+    rotateX.set(((midY - y) / midY) * 6);
+    ref.current.style.setProperty("--mx", `${x}px`);
+    ref.current.style.setProperty("--my", `${y}px`);
+  };
+
+  const handleMouseLeave = () => {
+    rotateX.set(0);
+    rotateY.set(0);
+  };
+
   return (
     <motion.div
+      ref={ref}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="relative rounded-2xl p-5 bg-gradient-card border border-border/60 overflow-hidden group"
+      style={{ rotateX: springX, rotateY: springY, transformPerspective: 800 }}
+      className="relative rounded-2xl p-5 bg-gradient-card border border-border/60 overflow-hidden group cursor-default"
     >
       <div className="text-[10px] uppercase tracking-[0.2em] font-mono text-muted-foreground">{label}</div>
       <div className="mt-2 flex items-end justify-between gap-3">
-        <div className="font-display text-3xl font-semibold tabular-nums">{value}</div>
+        <div className="font-display text-3xl font-semibold tabular-nums shimmer-value">{value}</div>
         {delta && (
           <div className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg ${positive ? "text-[var(--bull)] bg-[var(--bull)]/10" : "text-[var(--bear)] bg-[var(--bear)]/10"}`}>
             {positive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}

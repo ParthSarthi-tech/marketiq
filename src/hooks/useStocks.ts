@@ -154,6 +154,7 @@ export function useIndianStocks() {
           marketCap: STOCK_CONFIG[s.symbol]?.marketCap || "",
           tags: STOCK_CONFIG[s.symbol]?.tags || [],
           thesis: STOCK_CONFIG[s.symbol]?.thesis || "",
+          featured: STOCK_CONFIG[s.symbol]?.featured || false,
         }));
       }
 
@@ -179,6 +180,7 @@ export function useIndianStocks() {
           marketCap: stockConfig?.marketCap || "",
           tags: stockConfig?.tags || [],
           thesis: stockConfig?.thesis || "",
+          featured: stockConfig?.featured || false,
         };
       });
     },
