@@ -24,25 +24,60 @@ export function Navbar() {
             </span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
-            <Link to="/features" className="hover:text-foreground transition" activeProps={{ className: "text-foreground" }}>Features</Link>
-            <Link to="/ai-advisor" className="hover:text-foreground transition" activeProps={{ className: "text-foreground" }}>AI Advisor</Link>
-            <Link to="/learn" className="hover:text-foreground transition" activeProps={{ className: "text-foreground" }}>Learn</Link>
-            <Link to="/how-it-works" className="hover:text-foreground transition" activeProps={{ className: "text-foreground" }}>How it works</Link>
-            <a href="/#cta" className="hover:text-foreground transition">Pricing</a>
+            <Link
+              to="/features"
+              className="hover:text-foreground transition"
+              activeProps={{ className: "text-foreground" }}
+            >
+              Features
+            </Link>
+            <Link
+              to="/ai-advisor"
+              className="hover:text-foreground transition"
+              activeProps={{ className: "text-foreground" }}
+            >
+              AI Advisor
+            </Link>
+            <Link
+              to="/learn"
+              className="hover:text-foreground transition"
+              activeProps={{ className: "text-foreground" }}
+            >
+              Learn
+            </Link>
+            <Link
+              to="/how-it-works"
+              className="hover:text-foreground transition"
+              activeProps={{ className: "text-foreground" }}
+            >
+              How it works
+            </Link>
           </div>
           <div className="flex items-center gap-2">
-            {!loading && (isAuthenticated ? (
-              <Link to="/app" className="bg-gradient-primary text-primary-foreground text-sm font-semibold px-5 py-2 rounded-full hover:opacity-90 transition shadow-glow">
-                Open App
-              </Link>
-            ) : (
-              <>
-                <Link to="/sign-in" className="hidden sm:inline-flex text-sm text-muted-foreground hover:text-foreground px-4 py-2 transition">Sign in</Link>
-                <Link to="/sign-up" className="bg-gradient-primary text-primary-foreground text-sm font-semibold px-5 py-2 rounded-full hover:opacity-90 transition shadow-glow">
-                  Get started
+            {!loading &&
+              (isAuthenticated ? (
+                <Link
+                  to="/app"
+                  className="bg-gradient-primary text-primary-foreground text-sm font-semibold px-5 py-2 rounded-full hover:opacity-90 transition shadow-glow"
+                >
+                  Open App
                 </Link>
-              </>
-            ))}
+              ) : (
+                <>
+                  <Link
+                    to="/sign-in"
+                    className="hidden sm:inline-flex text-sm text-muted-foreground hover:text-foreground px-4 py-2 transition"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    to="/sign-up"
+                    className="bg-gradient-primary text-primary-foreground text-sm font-semibold px-5 py-2 rounded-full hover:opacity-90 transition shadow-glow"
+                  >
+                    Get started
+                  </Link>
+                </>
+              ))}
           </div>
         </nav>
       </div>

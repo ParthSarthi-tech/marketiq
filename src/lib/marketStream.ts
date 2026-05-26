@@ -29,86 +29,20 @@ class MarketStream {
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
   private subscribedKeys: Set<string> = new Set();
-  private tickCallback: TickCallback | null = null;
-  private statusCallback: StatusCallback | null = null;
+  private tickCallbacks: Set<TickCallback> = new Set();
+  private statusCallbacks: Set<StatusCallback> = new Set();
   private lastPrices: Record<string, { ltp: number; cp: number }> = {};
   private isConnecting = false;
 
   async connect(onTick: TickCallback, onStatus: StatusCallback): Promise<void> {
+    this.tickCallbacks.add(onTick);
+    this.statusCallbacks.add(onStatus);
+
     if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
       return;
     }
 
-    this.tickCallback = onTick;
-    this.statusCallback = onStatus;
-    this.isConnecting = true;
-
-    console.log("[MarketStream] Getting authorized WebSocket URL...");
-
-    const authUrl = await getWebSocketAuthUrl();
-
-    if (!authUrl) {
-      console.error("[MarketStream] Failed to get authorized URL");
-      this.isConnecting = false;
-      return;
-    }
-
-    console.log("[MarketStream] Connecting to authorized WebSocket...");
-
-    this.ws = new WebSocket(authUrl);
-
-    this.ws.onopen = () => {
-      console.log("[MarketStream] WebSocket connected");
-      this.isConnecting = false;
-      this.reconnectAttempts = 0;
-
-      if (this.subscribedKeys.size > 0) {
-        this.resubscribe();
-      }
-    };
-
-    this.ws.onmessage = async (event) => {
-      try {
-        let data: string;
-        const isBlob = event.data instanceof Blob;
-        
-        if (isBlob) {
-          data = await (event.data as Blob).text();
-          console.log("[MarketStream] Blob text length:", data.length, "first 50 chars:", data.substring(0, 50));
-        } else if (event.data instanceof ArrayBuffer) {
-          data = new TextDecoder().decode(event.data);
-        } else {
-          data = event.data;
-        }
-
-        data = data.trim();
-        
-        if (data.length === 0) {
-          console.log("[MarketStream] Empty message received");
-          return;
-        }
-
-        if (data.startsWith("{") || data.startsWith("[")) {
-          const message = JSON.parse(data);
-          this.handleMessage(message);
-        } else {
-          console.log("[MarketStream] Non-JSON message, first chars:", data.substring(0, 30));
-        }
-      } catch (e) {
-        console.error("[MarketStream] Failed to parse message:", e);
-      }
-    };
-
-    this.ws.onerror = (error) => {
-      console.error("[MarketStream] WebSocket error:", error);
-      this.isConnecting = false;
-    };
-
-    this.ws.onclose = (event) => {
-      console.log("[MarketStream] WebSocket closed", event.code, event.reason);
-      this.isConnecting = false;
-      this.handleDisconnect();
-    };
+    await this.connectInternal();
   }
 
   private handleMessage(message: Record<string, unknown>): void {
@@ -117,13 +51,12 @@ class MarketStream {
     if (type === "market_info") {
       const marketInfo = message.marketInfo as { segmentStatus?: MarketInfo };
       const segmentStatus = marketInfo?.segmentStatus || {};
-      console.log("[MarketStream] Market status:", segmentStatus);
-      this.statusCallback?.(segmentStatus);
+      this.statusCallbacks.forEach((cb) => cb(segmentStatus));
       return;
     }
 
     if (type === "live_feed") {
-      const feeds = message.feeds as Record<string, unknown> || {};
+      const feeds = (message.feeds as Record<string, unknown>) || {};
       const ticks: Record<string, TickData> = {};
 
       for (const [instrumentKey, feed] of Object.entries(feeds)) {
@@ -154,7 +87,7 @@ class MarketStream {
       }
 
       if (Object.keys(ticks).length > 0) {
-        this.tickCallback?.(ticks);
+        this.tickCallbacks.forEach((cb) => cb(ticks));
       }
     }
   }
@@ -170,17 +103,81 @@ class MarketStream {
   private handleDisconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error("[MarketStream] Max reconnect attempts reached");
+      this.tickCallbacks.clear();
+      this.statusCallbacks.clear();
       return;
     }
 
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-
-    console.log(`[MarketStream] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
-
     setTimeout(() => {
-      this.connect(this.tickCallback!, this.statusCallback!);
+      this.connectInternal();
     }, delay);
+  }
+
+  private async connectInternal(): Promise<void> {
+    if (this.ws?.readyState === WebSocket.OPEN || this.isConnecting) {
+      return;
+    }
+
+    this.isConnecting = true;
+
+    const authUrl = await getWebSocketAuthUrl();
+
+    if (!authUrl) {
+      console.error("[MarketStream] Failed to get authorized URL");
+      this.isConnecting = false;
+      return;
+    }
+
+    this.ws = new WebSocket(authUrl);
+
+    this.ws.onopen = () => {
+      this.isConnecting = false;
+      this.reconnectAttempts = 0;
+
+      if (this.subscribedKeys.size > 0) {
+        this.resubscribe();
+      }
+    };
+
+    this.ws.onmessage = async (event) => {
+      try {
+        let data: string;
+        const isBlob = event.data instanceof Blob;
+
+        if (isBlob) {
+          data = await (event.data as Blob).text();
+        } else if (event.data instanceof ArrayBuffer) {
+          data = new TextDecoder().decode(event.data);
+        } else {
+          data = event.data;
+        }
+
+        data = data.trim();
+
+        if (data.length === 0) {
+          return;
+        }
+
+        if (data.startsWith("{") || data.startsWith("[")) {
+          const message = JSON.parse(data);
+          this.handleMessage(message);
+        }
+      } catch (e) {
+        console.error("[MarketStream] Failed to parse message:", e);
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error("[MarketStream] WebSocket error:", error);
+      this.isConnecting = false;
+    };
+
+    this.ws.onclose = () => {
+      this.isConnecting = false;
+      this.handleDisconnect();
+    };
   }
 
   subscribe(instrumentKeys: string[]): void {
@@ -212,7 +209,6 @@ class MarketStream {
     };
 
     this.ws.send(JSON.stringify(request));
-    console.log("[MarketStream] Subscribed to:", keys.slice(0, 5).join(", "), "...");
   }
 
   unsubscribe(instrumentKeys: string[]): void {
@@ -245,6 +241,14 @@ class MarketStream {
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
+
+  removeTickCallback(cb: TickCallback): void {
+    this.tickCallbacks.delete(cb);
+  }
+
+  removeStatusCallback(cb: StatusCallback): void {
+    this.statusCallbacks.delete(cb);
+  }
 }
 
 let streamInstance: MarketStream | null = null;
@@ -259,7 +263,7 @@ export function getMarketStream(): MarketStream {
 export function subscribeToStocks(
   instrumentKeys: string[],
   onTick: (data: Record<string, TickData>) => void,
-  onStatus?: (info: MarketInfo | null) => void
+  onStatus?: (info: MarketInfo | null) => void,
 ): () => void {
   const stream = getMarketStream();
 
@@ -269,5 +273,7 @@ export function subscribeToStocks(
 
   return () => {
     stream.unsubscribe(instrumentKeys);
+    stream.removeTickCallback(onTick);
+    if (onStatus) stream.removeStatusCallback(onStatus);
   };
 }

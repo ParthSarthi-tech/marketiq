@@ -27,42 +27,35 @@ const SEARCH_QUERIES: Record<string, string> = {
   WIPRO: "WIPRO",
 };
 
-export async function resolveTickerToInstrumentKey(
-  ticker: string
-): Promise<string | null> {
+export async function resolveTickerToInstrumentKey(ticker: string): Promise<string | null> {
   if (RESOLVED_KEYS[ticker]) {
     return RESOLVED_KEYS[ticker];
   }
 
-  const query = SEARCH_QUERIES[ticker];
-  if (!query) return null;
+  const query = SEARCH_QUERIES[ticker] || ticker;
 
   const results = await searchInstruments(query, "NSE");
 
   const exactMatch = results.find(
     (r) =>
       r.trading_symbol.toUpperCase() === ticker ||
-      r.name.toUpperCase().includes(query.toUpperCase())
+      r.name.toUpperCase().includes(query.toUpperCase()),
   );
 
   if (exactMatch && exactMatch.segment === "NSE_EQ") {
-    console.log(`[InstrumentResolver] Raw instrument_key from search: ${exactMatch.instrument_key}`);
     RESOLVED_KEYS[ticker] = exactMatch.instrument_key;
     SYMBOL_TO_KEY[exactMatch.trading_symbol] = exactMatch.instrument_key;
-    console.log(`[InstrumentResolver] ${ticker} → ${exactMatch.instrument_key}`);
     return exactMatch.instrument_key;
   }
 
   const fallback = results.find((r) => r.segment === "NSE_EQ");
   if (fallback) {
-    console.log(`[InstrumentResolver] Raw instrument_key from search: ${fallback.instrument_key}`);
     RESOLVED_KEYS[ticker] = fallback.instrument_key;
     SYMBOL_TO_KEY[fallback.trading_symbol] = fallback.instrument_key;
-    console.log(`[InstrumentResolver] ${ticker} → ${fallback.instrument_key}`);
     return fallback.instrument_key;
   }
 
-  return null;
+  return resolveAnyKey(ticker);
 }
 
 export async function resolveAllInstrumentKeys(): Promise<Record<string, string>> {
@@ -71,19 +64,15 @@ export async function resolveAllInstrumentKeys(): Promise<Record<string, string>
   const tickers = Object.keys(STOCK_CONFIG);
   const results: Record<string, string> = {};
 
-  console.log("[InstrumentResolver] Resolving instrument keys for", tickers.length, "stocks...");
-
   for (const ticker of tickers) {
     try {
       const key = await resolveTickerToInstrumentKey(ticker);
       if (key) {
         results[ticker] = key;
-        console.log(`[InstrumentResolver] ${ticker} → ${key}`);
       } else {
         const fallbackKey = await resolveAnyKey(ticker);
         if (fallbackKey) {
           results[ticker] = fallbackKey;
-          console.log(`[InstrumentResolver] ${ticker} → ${fallbackKey} (via resolveAnyKey)`);
         } else {
           console.warn(`[InstrumentResolver] Could not resolve: ${ticker}`);
         }
@@ -95,13 +84,6 @@ export async function resolveAllInstrumentKeys(): Promise<Record<string, string>
   }
 
   initialized = true;
-  console.log(
-    "[InstrumentResolver] Resolved",
-    Object.keys(results).length,
-    "/",
-    tickers.length,
-    "stocks"
-  );
 
   return results;
 }
@@ -140,9 +122,7 @@ export async function resolveAnyKey(ticker: string): Promise<string | null> {
   const results = await searchInstruments(ticker, "NSE");
 
   const eqMatch = results.find(
-    (r) =>
-      r.trading_symbol.toUpperCase() === ticker.toUpperCase() &&
-      r.segment === "NSE_EQ"
+    (r) => r.trading_symbol.toUpperCase() === ticker.toUpperCase() && r.segment === "NSE_EQ",
   );
 
   if (eqMatch) {
@@ -162,7 +142,7 @@ export async function resolveAnyKey(ticker: string): Promise<string | null> {
 }
 
 export function resolveSearchResult(
-  result: InstrumentSearchResult
+  result: InstrumentSearchResult,
 ): { symbol: string; name: string; instrumentKey: string } | null {
   if (result.segment !== "NSE_EQ" && result.segment !== "BSE_EQ") {
     return null;

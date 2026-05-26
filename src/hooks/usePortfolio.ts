@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   getUserPortfolio,
@@ -10,6 +10,8 @@ import {
 } from "@/lib/db";
 import { getQuotesBatch, type StockQuote } from "@/lib/upstox";
 import { resolveAnyKey } from "@/lib/instrumentResolver";
+import { getStockSector } from "@/lib/stockMetadata";
+import { subscribeToStocks } from "@/lib/marketStream";
 import type { Portfolio } from "@/lib/supabase";
 
 export interface PortfolioHolding extends Portfolio {
@@ -23,6 +25,7 @@ export interface PortfolioHolding extends Portfolio {
 
 export function usePortfolio(userId: string | null) {
   const queryClient = useQueryClient();
+  const [liveQuotes, setLiveQuotes] = useState<Record<string, StockQuote>>({});
 
   const { data: holdings = [], isLoading: holdingsLoading } = useQuery({
     queryKey: ["portfolio", userId],
@@ -53,8 +56,64 @@ export function usePortfolio(userId: string | null) {
       return quotesMap;
     },
     enabled: holdings.length > 0,
-    staleTime: 30000,
+    staleTime: 15000,
+    refetchInterval: 15000,
+    refetchIntervalInBackground: true,
   });
+
+  useEffect(() => {
+    if (holdings.length === 0) return;
+
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+
+    (async () => {
+      const keys: string[] = [];
+      for (const h of holdings) {
+        const key = await resolveAnyKey(h.ticker);
+        if (key && !cancelled) keys.push(key);
+      }
+      if (cancelled || keys.length === 0) return;
+
+      unsub = subscribeToStocks(
+        keys,
+        (ticks) => {
+          setLiveQuotes((prev) => {
+            const next = { ...prev };
+            for (const [_key, tick] of Object.entries(ticks)) {
+              next[tick.symbol] = {
+                symbol: tick.symbol,
+                lastPrice: tick.ltp,
+                change: tick.change,
+                changePercent: tick.changePercent,
+                open: tick.ltp,
+                high: tick.ltp,
+                low: tick.ltp,
+                close: tick.closePrice,
+                volume: tick.volume,
+                timestamp: tick.timestamp,
+                c: tick.ltp,
+                d: tick.change,
+                dp: tick.changePercent,
+                h: tick.ltp,
+                l: tick.ltp,
+                o: tick.ltp,
+                pc: tick.closePrice,
+                v: tick.volume,
+              };
+            }
+            return next;
+          });
+        },
+        () => {},
+      );
+    })();
+
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, [holdings]);
 
   const { data: cashBalance = 250000 } = useQuery({
     queryKey: ["cashBalance", userId],
@@ -62,8 +121,10 @@ export function usePortfolio(userId: string | null) {
     enabled: !!userId,
   });
 
+  const mergedQuotes = { ...quotes, ...liveQuotes };
+
   const enrichedHoldings: PortfolioHolding[] = holdings.map((h) => {
-    const quote = quotes[h.ticker];
+    const quote = mergedQuotes[h.ticker];
     const currentPrice = quote?.c || h.avg_buy_price;
     const currentValue = currentPrice * h.quantity;
     const pl = (currentPrice - h.avg_buy_price) * h.quantity;
@@ -200,7 +261,7 @@ export function usePortfolio(userId: string | null) {
 
   const sectorAllocation = enrichedHoldings.reduce(
     (acc, h) => {
-      const sector = h.company_name?.split(" ")[0] || "Other";
+      const sector = getStockSector(h.ticker);
       acc[sector] = (acc[sector] || 0) + h.currentValue;
       return acc;
     },

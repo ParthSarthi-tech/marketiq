@@ -9,18 +9,11 @@ import {
   type StockQuote,
   type InstrumentSearchResult,
 } from "@/lib/upstox";
-import {
-  STOCK_CONFIG,
-  INDIAN_STOCKS,
-  INDEX_KEYS,
-  getAllTickers,
-} from "@/lib/stockMetadata";
+import { STOCK_CONFIG, INDIAN_STOCKS, INDEX_KEYS, getAllTickers } from "@/lib/stockMetadata";
 import { resolveAllInstrumentKeys, getResolvedKey, resolveAnyKey } from "@/lib/instrumentResolver";
 import { subscribeToStocks, type TickData, type MarketInfo } from "@/lib/marketStream";
 
 export type { StockQuote, InstrumentSearchResult };
-
-console.log("[useStocks] UPSTOX_TOKEN:", import.meta.env.VITE_UPSTOX_ACCESS_TOKEN ? "Present ✓" : "MISSING ✗");
 
 export function useStockQuote(symbol: string) {
   const [liveQuote, setLiveQuote] = useState<StockQuote | null>(null);
@@ -54,7 +47,7 @@ export function useStockQuote(symbol: string) {
       return key;
     };
 
-    fetchKey().then(key => {
+    fetchKey().then((key) => {
       if (!key) return;
 
       const unsubscribe = subscribeToStocks(
@@ -85,7 +78,7 @@ export function useStockQuote(symbol: string) {
             setWsConnected(true);
           }
         },
-        () => {}
+        () => {},
       );
 
       return unsubscribe;
@@ -123,16 +116,21 @@ export function useMarketStatus() {
 }
 
 export function useIndianStocks() {
-  const [liveQuotes, setLiveQuotes] = useState<Map<string, {
-    c: number;
-    d: number;
-    dp: number;
-    h: number;
-    l: number;
-    o: number;
-    pc: number;
-    v: number;
-  }>>(new Map());
+  const [liveQuotes, setLiveQuotes] = useState<
+    Map<
+      string,
+      {
+        c: number;
+        d: number;
+        dp: number;
+        h: number;
+        l: number;
+        o: number;
+        pc: number;
+        v: number;
+      }
+    >
+  >(new Map());
 
   const { data: initialData, isLoading } = useQuery({
     queryKey: ["indianStocks"],
@@ -141,11 +139,7 @@ export function useIndianStocks() {
 
       const keys = await resolveAllInstrumentKeys();
 
-      const instrumentKeys = tickers
-        .map((t) => getResolvedKey(t))
-        .filter(Boolean) as string[];
-
-      console.log("[useIndianStocks] Fetching quotes for:", instrumentKeys.length, "instruments");
+      const instrumentKeys = tickers.map((t) => getResolvedKey(t)).filter(Boolean) as string[];
 
       if (instrumentKeys.length === 0) {
         return INDIAN_STOCKS.map((s) => ({
@@ -167,16 +161,18 @@ export function useIndianStocks() {
 
         return {
           ...s,
-          quote: quote ? {
-            c: quote.lastPrice,
-            d: quote.change,
-            dp: quote.changePercent,
-            h: quote.high,
-            l: quote.low,
-            o: quote.open,
-            pc: quote.close,
-            v: quote.volume,
-          } : null,
+          quote: quote
+            ? {
+                c: quote.lastPrice,
+                d: quote.change,
+                dp: quote.changePercent,
+                h: quote.high,
+                l: quote.low,
+                o: quote.open,
+                pc: quote.close,
+                v: quote.volume,
+              }
+            : null,
           marketCap: stockConfig?.marketCap || "",
           tags: stockConfig?.tags || [],
           thesis: stockConfig?.thesis || "",
@@ -193,21 +189,19 @@ export function useIndianStocks() {
       const tickers = Object.keys(STOCK_CONFIG);
       await resolveAllInstrumentKeys();
 
-      const instrumentKeys = tickers
-        .map((t) => getResolvedKey(t))
-        .filter(Boolean) as string[];
+      const instrumentKeys = tickers.map((t) => getResolvedKey(t)).filter(Boolean) as string[];
 
       if (instrumentKeys.length === 0) return;
 
       const unsubscribe = subscribeToStocks(
         instrumentKeys,
         (ticks) => {
-          console.log("[useStocks] Raw ticks received:", JSON.stringify(ticks));
-          
-          const newLiveQuotes = new Map<string, typeof liveQuotes extends Map<string, infer V> ? V : never>();
-          
+          const newLiveQuotes = new Map<
+            string,
+            typeof liveQuotes extends Map<string, infer V> ? V : never
+          >();
+
           for (const [key, tick] of Object.entries(ticks)) {
-            console.log(`[useStocks] Setting live quote for symbol: ${tick.symbol}, ltp: ${tick.ltp}`);
             newLiveQuotes.set(tick.symbol, {
               c: tick.ltp,
               d: tick.change,
@@ -219,13 +213,9 @@ export function useIndianStocks() {
               v: tick.volume,
             });
           }
-          
-          console.log("[useStocks] liveQuotes Map keys:", Array.from(newLiveQuotes.keys()));
           setLiveQuotes(newLiveQuotes);
         },
-        (status) => {
-          console.log("[useIndianStocks] Market status:", status);
-        }
+        () => {},
       );
 
       return unsubscribe;
@@ -233,23 +223,24 @@ export function useIndianStocks() {
 
     const result = loadAndSubscribe();
     return () => {
-      result.then(unsubscribe => unsubscribe?.());
+      result.then((unsubscribe) => unsubscribe?.());
     };
   }, []);
 
   useEffect(() => {
     const tickers = Object.keys(STOCK_CONFIG);
-    
+
     const pollQuotes = async () => {
-      const keys = tickers
-        .map((t) => getResolvedKey(t))
-        .filter(Boolean) as string[];
+      const keys = tickers.map((t) => getResolvedKey(t)).filter(Boolean) as string[];
 
       if (keys.length === 0) return;
 
       try {
         const quotes = await getQuotesBatch(keys);
-        const newLiveQuotes = new Map<string, typeof liveQuotes extends Map<string, infer V> ? V : never>();
+        const newLiveQuotes = new Map<
+          string,
+          typeof liveQuotes extends Map<string, infer V> ? V : never
+        >();
 
         for (const ticker of tickers) {
           const key = getResolvedKey(ticker);
@@ -267,11 +258,9 @@ export function useIndianStocks() {
             });
           }
         }
-        
+
         setLiveQuotes(newLiveQuotes);
-      } catch (e) {
-        console.log("[useStocks] Polling error:", e);
-      }
+      } catch {}
     };
 
     pollQuotes();
@@ -280,16 +269,14 @@ export function useIndianStocks() {
     return () => clearInterval(interval);
   }, []);
 
-  const stocks = initialData?.map(s => {
-    const liveQuote = liveQuotes.get(s.symbol);
-    if (liveQuote) {
-      console.log(`[useStocks] Found live quote for ${s.symbol}:`, liveQuote);
-    }
-    return {
-      ...s,
-      quote: liveQuote || s.quote,
-    };
-  }) || [];
+  const stocks =
+    initialData?.map((s) => {
+      const liveQuote = liveQuotes.get(s.symbol);
+      return {
+        ...s,
+        quote: liveQuote || s.quote,
+      };
+    }) || [];
 
   return { data: stocks, isLoading };
 }
@@ -300,9 +287,7 @@ export function useMultipleQuotes(symbols: string[]) {
     queryFn: async () => {
       await resolveAllInstrumentKeys();
 
-      const keys = symbols
-        .map((s) => getResolvedKey(s))
-        .filter(Boolean) as string[];
+      const keys = symbols.map((s) => getResolvedKey(s)).filter(Boolean) as string[];
 
       if (keys.length === 0) return {};
 
@@ -311,7 +296,7 @@ export function useMultipleQuotes(symbols: string[]) {
       const result: Record<string, StockQuote | null> = {};
       for (const sym of symbols) {
         const key = getResolvedKey(sym);
-        result[sym] = key ? (quotes[key] || null) : null;
+        result[sym] = key ? quotes[key] || null : null;
       }
       return result;
     },

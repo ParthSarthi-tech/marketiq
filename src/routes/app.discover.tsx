@@ -1,30 +1,51 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
-import { Sparkles, Plus, Check, Flame, Shield, Rocket, Search, Loader2, X, TrendingUp, BarChart3, ArrowRight } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  Sparkles,
+  Plus,
+  Check,
+  Flame,
+  Shield,
+  Rocket,
+  Search,
+  Loader2,
+  X,
+  TrendingUp,
+  BarChart3,
+  ArrowRight,
+} from "lucide-react";
 import { PageHeader, Sparkline } from "@/components/app/widgets";
 import { useAuth } from "@/hooks/useAuth";
 import { useIndianStocks, useStockSearch } from "@/hooks/useStocks";
 import { useWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/useWatchlist";
 import { useUserProfile } from "@/hooks/useUserProfile";
-import { loadStockData } from "@/lib/stockData";
+import { loadStockData, getStockScore } from "@/lib/stockData";
 
 function getDeterministicSparkline(symbol: string): number[] {
   const stockData = loadStockData(symbol);
   if (!stockData?.revenueGrowth || stockData.revenueGrowth.length < 8) {
     const hash = symbol.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return Array.from({ length: 8 }, (_, i) => 15 + (Math.sin(hash + i) * 10));
+    return Array.from({ length: 8 }, (_, i) => 15 + Math.sin(hash + i) * 10);
   }
   const growth = stockData.revenueGrowth.slice(-8);
   const max = Math.max(...growth);
   const min = Math.min(...growth);
   const range = max - min || 1;
-  return growth.map(v => 10 + ((v - min) / range) * 20);
+  return growth.map((v) => 10 + ((v - min) / range) * 20);
 }
 
 export const Route = createFileRoute("/app/discover")({
   component: Discover,
-  head: () => ({ meta: [{ title: "Discover — MarketIQ" }, { name: "description", content: "AI-matched stock picks based on your goals, risk and horizon." }] }),
+  head: () => ({
+    meta: [
+      { title: "Discover — MarketIQ" },
+      {
+        name: "description",
+        content: "AI-matched stock picks based on your goals, risk and horizon.",
+      },
+    ],
+  }),
 });
 
 const filters = [
@@ -33,8 +54,6 @@ const filters = [
   { id: "defensive", label: "Defensive", icon: Shield },
   { id: "momentum", label: "Momentum", icon: Flame },
 ];
-
-
 
 function Discover() {
   const { user } = useAuth();
@@ -46,22 +65,34 @@ function Discover() {
 
   const riskProfile = profile?.risk_appetite || "med-high";
   const userGoal = profile?.goal || "wealth";
-  
-  const defaultFilter = riskProfile === "low" ? "defensive" : riskProfile === "high" ? "growth" : "all";
-  
+
+  const defaultFilter =
+    riskProfile === "low" ? "defensive" : riskProfile === "high" ? "growth" : "all";
+
   const [active, setActive] = useState(defaultFilter);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  
-  const { data: searchResults, isLoading: searchLoading } = useStockSearch(searchQuery);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const watchlistTickers = new Set(watchlist.map(w => w.ticker));
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery]);
 
-  const filteredStocks = allStocks?.filter(s => {
-    const tags = s.tags || [];
-    if (active === "all") return s.featured;
-    return tags.includes(active);
-  }) || [];
+  const { data: searchResults, isLoading: searchLoading } = useStockSearch(debouncedSearch);
+
+  const watchlistTickers = new Set(watchlist.map((w) => w.ticker));
+
+  const filteredStocks =
+    allStocks?.filter((s) => {
+      const tags = s.tags || [];
+      if (active === "all") return s.featured;
+      return tags.includes(active);
+    }) || [];
 
   const toggleWatchlist = (ticker: string, name: string) => {
     if (!user) return;
@@ -72,16 +103,26 @@ function Discover() {
     }
   };
 
-  const getMatchScore = () => Math.floor(70 + Math.random() * 30);
+  const getMatchScore = useCallback((symbol: string) => {
+    const data = loadStockData(symbol);
+    if (data) {
+      return Math.min(99, Math.max(40, getStockScore(data)));
+    }
+    return 75;
+  }, []);
 
   return (
     <div>
       <PageHeader
         eyebrow="Discover"
-        title={<>Stocks picked <span className="text-gradient">for you</span>.</>}
+        title={
+          <>
+            Stocks picked <span className="text-gradient">for you</span>.
+          </>
+        }
         subtitle={`${filteredStocks.length} picks matched to your ${riskProfile === "high" ? "aggressive" : riskProfile === "med-high" ? "moderate-aggressive" : riskProfile === "med-low" ? "moderate" : "conservative"} profile`}
         action={
-          <button 
+          <button
             onClick={() => setShowSearch(!showSearch)}
             className="inline-flex items-center gap-2 glass px-3 py-1.5 rounded-full text-xs font-mono hover:bg-card/60 transition"
           >
@@ -102,7 +143,10 @@ function Discover() {
               className="w-full bg-background/40 border border-border/60 rounded-xl pl-10 pr-4 py-2 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+              >
                 <X className="w-4 h-4 text-muted-foreground" />
               </button>
             )}
@@ -127,7 +171,10 @@ function Discover() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={(e) => { e.preventDefault(); toggleWatchlist(s.trading_symbol, s.name); }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleWatchlist(s.trading_symbol, s.name);
+                      }}
                       className={`text-xs px-2 py-1 rounded ${watchlistTickers.has(s.trading_symbol) ? "text-[var(--bull)]" : "text-muted-foreground hover:text-foreground"}`}
                     >
                       {watchlistTickers.has(s.trading_symbol) ? "Watching" : "Add"}
@@ -151,9 +198,16 @@ function Discover() {
               onClick={() => setActive(f.id)}
               className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm transition ${on ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
-              {on && <motion.span layoutId="filter-pill" className="absolute inset-0 rounded-full bg-gradient-primary shadow-glow" />}
+              {on && (
+                <motion.span
+                  layoutId="filter-pill"
+                  className="absolute inset-0 rounded-full bg-gradient-primary shadow-glow"
+                />
+              )}
               <Icon className={`relative w-3.5 h-3.5 ${on ? "text-primary-foreground" : ""}`} />
-              <span className={`relative ${on ? "text-primary-foreground font-semibold" : ""}`}>{f.label}</span>
+              <span className={`relative ${on ? "text-primary-foreground font-semibold" : ""}`}>
+                {f.label}
+              </span>
             </button>
           );
         })}
@@ -163,13 +217,27 @@ function Discover() {
         <div className="flex items-center justify-center py-20">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
+      ) : filteredStocks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-16 h-16 rounded-full bg-card/60 flex items-center justify-center mb-4">
+            <Search className="w-7 h-7 text-muted-foreground" />
+          </div>
+          <p className="font-semibold mb-1">
+            {searchQuery ? "No stocks match your search" : "No stocks found"}
+          </p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            {searchQuery
+              ? "Try a different ticker or company name."
+              : "Try adjusting your filters or check back later."}
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filteredStocks.map((s, i) => {
             const inWatchlist = watchlistTickers.has(s.symbol);
             const up = (s.quote?.dp || 0) >= 0;
-            const match = getMatchScore();
-            
+            const match = getMatchScore(s.symbol);
+
             return (
               <motion.div
                 key={s.symbol}
@@ -183,7 +251,9 @@ function Discover() {
 
                 <div className="flex items-start justify-between mb-3 relative">
                   <div>
-                    <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">NSE</div>
+                    <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                      NSE
+                    </div>
                     <div className="font-display text-xl font-semibold">{s.symbol}</div>
                     <div className="text-xs text-muted-foreground">{s.name}</div>
                   </div>
@@ -199,8 +269,11 @@ function Discover() {
                     <div className="font-mono text-2xl font-semibold tabular-nums">
                       ₹{s.quote?.c?.toLocaleString("en-IN", { minimumFractionDigits: 2 }) || "—"}
                     </div>
-                    <div className={`text-xs font-semibold ${up ? "text-[var(--bull)]" : "text-[var(--bear)]"}`}>
-                      {up ? "+" : ""}{s.quote?.dp?.toFixed(2) || "0.00"}% today
+                    <div
+                      className={`text-xs font-semibold ${up ? "text-[var(--bull)]" : "text-[var(--bear)]"}`}
+                    >
+                      {up ? "+" : ""}
+                      {s.quote?.dp?.toFixed(2) || "0.00"}% today
                     </div>
                   </div>
                   <div className="w-32">
@@ -208,10 +281,12 @@ function Discover() {
                   </div>
                 </div>
 
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4 relative">{s.thesis}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed mb-4 relative">
+                  {s.thesis}
+                </p>
 
                 <div className="flex gap-2 relative">
-                  <Link 
+                  <Link
                     to="/app/analyze/$symbol"
                     params={{ symbol: s.symbol }}
                     className="flex-1 text-sm font-medium px-4 py-2.5 rounded-xl glass hover:bg-card/60 transition flex items-center justify-center gap-2"
@@ -223,12 +298,20 @@ function Discover() {
                     onClick={() => toggleWatchlist(s.symbol, s.name)}
                     disabled={addToWatchlist.isPending || removeFromWatchlist.isPending}
                     className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition ${
-                      inWatchlist 
-                        ? "bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/40" 
+                      inWatchlist
+                        ? "bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/40"
                         : "bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90"
                     }`}
                   >
-                    {inWatchlist ? <><Check className="w-4 h-4" /> Watching</> : <><Plus className="w-4 h-4" /> Watch</>}
+                    {inWatchlist ? (
+                      <>
+                        <Check className="w-4 h-4" /> Watching
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4" /> Watch
+                      </>
+                    )}
                   </button>
                 </div>
               </motion.div>
@@ -236,7 +319,6 @@ function Discover() {
           })}
         </div>
       )}
-
-      </div>
+    </div>
   );
 }

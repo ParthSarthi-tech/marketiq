@@ -44,9 +44,7 @@ async function upstoxFetch<T>(url: string, cacheKey?: string): Promise<T> {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      `Upstox API error: ${response.status} — ${JSON.stringify(errorData)}`
-    );
+    throw new Error(`Upstox API error: ${response.status} — ${JSON.stringify(errorData)}`);
   }
 
   const data = await response.json();
@@ -125,29 +123,35 @@ export interface MarketStatus {
 
 export interface LTPV3Response {
   status: string;
-  data: Record<string, {
-    last_price: number;
-    instrument_token: string;
-    ltq?: number;
-    volume?: number;
-    cp?: number;
-  }>;
+  data: Record<
+    string,
+    {
+      last_price: number;
+      instrument_token: string;
+      ltq?: number;
+      volume?: number;
+      cp?: number;
+    }
+  >;
 }
 
 export interface OHLCV3Response {
   status: string;
-  data: Record<string, {
-    ohlc: {
-      open: number;
-      high: number;
-      low: number;
-      close: number;
-    };
-    depth?: {
-      buy: Array<{ price: number; quantity: number }>;
-      sell: Array<{ price: number; quantity: number }>;
-    };
-  }>;
+  data: Record<
+    string,
+    {
+      ohlc: {
+        open: number;
+        high: number;
+        low: number;
+        close: number;
+      };
+      depth?: {
+        buy: Array<{ price: number; quantity: number }>;
+        sell: Array<{ price: number; quantity: number }>;
+      };
+    }
+  >;
 }
 
 export interface HistoricalCandleResponse {
@@ -207,28 +211,22 @@ export interface FullQuoteResponse {
   data: Record<string, FullQuote>;
 }
 
-function parseLTPResponse(
-  data: LTPV3Response,
-  instrumentKeys: string[]
-): StockQuote[] {
+function parseLTPResponse(data: LTPV3Response, instrumentKeys: string[]): StockQuote[] {
   const quotes: StockQuote[] = [];
-
   const responseKeys = Object.keys(data.data || {});
-  console.log("[parseLTPResponse] Response has keys:", responseKeys.slice(0, 5));
 
   for (const key of instrumentKeys) {
     const inputSymbol = extractSymbolFromKey(key);
-    
+
     let entry = data.data[key];
-    
+
     if (!entry) {
-      const matchedKey = responseKeys.find(rk => {
+      const matchedKey = responseKeys.find((rk) => {
         const rkSymbol = rk.includes(":") ? rk.split(":")[1] : "";
         return rkSymbol.toUpperCase() === inputSymbol.toUpperCase();
       });
       if (matchedKey) {
         entry = data.data[matchedKey];
-        console.log("[parseLTPResponse] Found match:", matchedKey, "for input:", key);
       }
     }
 
@@ -283,9 +281,7 @@ import { getResolvedKeyBySymbol } from "./instrumentResolver";
 
 const BATCH_SIZE = 5;
 
-async function fetchQuoteChunk(
-  chunk: string[]
-): Promise<Record<string, StockQuote>> {
+async function fetchQuoteChunk(chunk: string[]): Promise<Record<string, StockQuote>> {
   const keysParam = chunk.map((k) => encodeURIComponent(k)).join(",");
   const url = `${UPSTOX_V2_URL}/market-quote/quotes?instrument_key=${keysParam}`;
 
@@ -321,18 +317,14 @@ async function fetchQuoteChunk(
 }
 
 export async function getQuotesBatch(
-  instrumentKeys: string[]
+  instrumentKeys: string[],
 ): Promise<Record<string, StockQuote>> {
   if (instrumentKeys.length === 0) return {};
-
-  console.log("[getQuotesBatch] Total keys:", instrumentKeys.length);
 
   const chunks: string[][] = [];
   for (let i = 0; i < instrumentKeys.length; i += BATCH_SIZE) {
     chunks.push(instrumentKeys.slice(i, i + BATCH_SIZE));
   }
-
-  console.log("[getQuotesBatch] Splitting into", chunks.length, "batches of", BATCH_SIZE);
 
   const results = await Promise.all(chunks.map(fetchQuoteChunk));
 
@@ -341,13 +333,12 @@ export async function getQuotesBatch(
     Object.assign(merged, r);
   }
 
-  console.log("[getQuotesBatch] Merged result keys:", Object.keys(merged).length);
   return merged;
 }
 
 export async function getStockQuote(
   instrumentKey: string,
-  tickerSymbol?: string
+  tickerSymbol?: string,
 ): Promise<StockQuote | null> {
   try {
     const url = `${UPSTOX_V2_URL}/market-quote/quotes?instrument_key=${encodeURIComponent(instrumentKey)}`;
@@ -364,7 +355,7 @@ export async function getStockQuote(
 
     if (!entry) {
       for (const [key, val] of Object.entries(data.data || {})) {
-        const symbolFromKey = key.split(':')[1];
+        const symbolFromKey = key.split(":")[1];
         if (symbolFromKey === searchSymbol) {
           entry = val;
           break;
@@ -405,15 +396,13 @@ export async function getStockQuote(
   }
 }
 
-export async function getIndexQuote(
-  indexKey: string
-): Promise<StockQuote | null> {
+export async function getIndexQuote(indexKey: string): Promise<StockQuote | null> {
   return getStockQuote(indexKey);
 }
 
 export async function getStockOHLC(
   instrumentKey: string,
-  interval: "1day" | "30minute" | "1minute" = "1day"
+  interval: "1day" | "30minute" | "1minute" = "1day",
 ): Promise<OHLCData | null> {
   try {
     const intervalMap: Record<string, string> = {
@@ -448,7 +437,7 @@ export async function getHistoricalCandles(
   instrumentKey: string,
   toDate: string,
   fromDate?: string,
-  interval: "1minute" | "30minute" | "1day" | "1week" | "1month" = "1day"
+  interval: "1minute" | "30minute" | "1day" | "1week" | "1month" = "1day",
 ): Promise<HistoricalCandle[]> {
   try {
     const intervalMap: Record<string, { unit: string; interval: string }> = {
@@ -459,14 +448,20 @@ export async function getHistoricalCandles(
       "1month": { unit: "months", interval: "1" },
     };
 
-    const { unit, interval: intervalValue } = intervalMap[interval] || { unit: "days", interval: "1" };
+    const { unit, interval: intervalValue } = intervalMap[interval] || {
+      unit: "days",
+      interval: "1",
+    };
 
     let url = `${UPSTOX_BASE_URL}/historical-candle/${encodeURIComponent(instrumentKey)}/${unit}/${intervalValue}/${toDate}`;
     if (fromDate) {
       url += `/${fromDate}`;
     }
 
-    const data = await upstoxFetch<HistoricalCandleResponse>(url, `hist_${instrumentKey}_${unit}_${intervalValue}_${toDate}`);
+    const data = await upstoxFetch<HistoricalCandleResponse>(
+      url,
+      `hist_${instrumentKey}_${unit}_${intervalValue}_${toDate}`,
+    );
 
     if (!data.data?.candles) return [];
 
@@ -492,7 +487,7 @@ export async function searchInstruments(
   expiry?: string,
   atmOffset?: number,
   pageNumber: number = 1,
-  records: number = 20
+  records: number = 20,
 ): Promise<InstrumentSearchResult[]> {
   try {
     const params = new URLSearchParams();
@@ -516,7 +511,7 @@ export async function searchInstruments(
 }
 
 export async function getMarketStatus(
-  exchange: "NSE" | "BSE" | "MCX" = "NSE"
+  exchange: "NSE" | "BSE" | "MCX" = "NSE",
 ): Promise<MarketStatus | null> {
   try {
     const url = `${UPSTOX_V2_URL}/market-status?exchange=${exchange}`;
@@ -529,9 +524,7 @@ export async function getMarketStatus(
   }
 }
 
-export async function getFullQuotes(
-  instrumentKeys: string[]
-): Promise<Record<string, FullQuote>> {
+export async function getFullQuotes(instrumentKeys: string[]): Promise<Record<string, FullQuote>> {
   if (instrumentKeys.length === 0) return {};
 
   const keysParam = instrumentKeys.map((k) => encodeURIComponent(k)).join(",");
@@ -543,9 +536,7 @@ export async function getFullQuotes(
   return data.data || {};
 }
 
-export async function getFullQuote(
-  instrumentKey: string
-): Promise<FullQuote | null> {
+export async function getFullQuote(instrumentKey: string): Promise<FullQuote | null> {
   try {
     const quotes = await getFullQuotes([instrumentKey]);
     return quotes[instrumentKey] || null;

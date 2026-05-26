@@ -18,7 +18,7 @@ import {
 import { PageHeader, StatCard, CountUp, Sparkline } from "@/components/app/widgets";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
-import { STOCK_CONFIG } from "@/lib/stockMetadata";
+import { STOCK_CONFIG, getStockSector } from "@/lib/stockMetadata";
 import { getQuotesBatch } from "@/lib/upstox";
 import { getResolvedKey } from "@/lib/instrumentResolver";
 import { useState } from "react";
@@ -112,12 +112,7 @@ function Portfolio() {
   const marketStatus = isMarketOpen();
 
   const filteredHoldings = filterSector
-    ? holdings.filter(
-        (_, i) =>
-          i === 0 ||
-          SECTOR_COLORS[Object.keys(sectorAllocation)[i % Object.keys(sectorAllocation).length]] ===
-            SECTOR_COLORS[filterSector],
-      )
+    ? holdings.filter((h) => getStockSector(h.ticker) === filterSector)
     : holdings;
 
   const handleExport = () => {
@@ -416,86 +411,123 @@ function Portfolio() {
           </span>
         </div>
         <div className="px-2 pb-2 overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead>
-              <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                <th className="text-left font-normal px-4 py-2">Symbol</th>
-                <th className="text-right font-normal px-4 py-2">Qty</th>
-                <th className="text-right font-normal px-4 py-2">Avg</th>
-                <th className="text-right font-normal px-4 py-2">LTP</th>
-                <th className="text-left font-normal px-4 py-2 hidden md:table-cell">Trend</th>
-                <th className="text-right font-normal px-4 py-2">P/L</th>
-                <th className="text-right font-normal px-4 py-2">Alloc</th>
-              </tr>
-            </thead>
-            <tbody>
-              {holdings.map((h, i) => {
-                const up = h.pl >= 0;
-                const allocPercent = totalValue > 0 ? (h.currentValue / totalValue) * 100 : 0;
-                return (
-                  <motion.tr
-                    key={h.ticker}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    onClick={() => setSelectedHolding(h)}
-                    className="border-t border-border/40 hover:bg-card/40 transition cursor-pointer"
+          {filteredHoldings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-16 h-16 rounded-full bg-card/60 flex items-center justify-center mb-4">
+                <BarChart3 className="w-7 h-7 text-muted-foreground" />
+              </div>
+              {holdings.length === 0 ? (
+                <>
+                  <p className="font-semibold mb-1">No holdings yet</p>
+                  <p className="text-sm text-muted-foreground mb-6 max-w-xs">
+                    Start building your portfolio by discovering stocks and making your first buy.
+                  </p>
+                  <Link
+                    to="/app/discover"
+                    className="inline-flex items-center gap-2 bg-gradient-primary text-primary-foreground px-5 py-2.5 rounded-xl text-sm font-semibold shadow-glow"
                   >
-                    <td className="px-4 py-3">
-                      <div className="font-mono text-xs text-muted-foreground">
-                        {h.company_name || h.ticker}
-                      </div>
-                      <div className="font-medium">{h.ticker}</div>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">{h.quantity}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      ₹{h.avg_buy_price.toLocaleString("en-IN")}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      ₹{h.currentPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell w-[140px]">
-                      <Sparkline values={getDeterministicSparkline(h.ticker)} positive={up} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div
-                        className={`inline-flex items-center gap-1 text-xs font-semibold ${up ? "text-[var(--bull)]" : "text-[var(--bear)]"}`}
-                      >
-                        {up ? (
-                          <ArrowUpRight className="w-3 h-3" />
-                        ) : (
-                          <ArrowDownRight className="w-3 h-3" />
-                        )}
-                        {up ? "+" : ""}₹
-                        {Math.abs(Math.round(h.pl)).toLocaleString("en-IN", {
-                          maximumFractionDigits: 0,
-                        })}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground font-mono">
-                        {up ? "+" : ""}
-                        {h.plPercent.toFixed(2)}%
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex items-center gap-2 justify-end">
-                        <div className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${allocPercent}%` }}
-                            transition={{ duration: 0.8, delay: i * 0.05 }}
-                            className="h-full bg-gradient-primary"
-                          />
+                    <Search className="w-4 h-4" /> Discover stocks
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold mb-1">No matching holdings</p>
+                  <p className="text-sm text-muted-foreground">
+                    Try clearing the sector filter to see all holdings.
+                  </p>
+                  {filterSector && (
+                    <button
+                      onClick={() => setFilterSector(null)}
+                      className="mt-4 text-sm text-primary hover:underline"
+                    >
+                      Clear filter
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <table className="w-full text-sm min-w-[720px]">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  <th className="text-left font-normal px-4 py-2">Symbol</th>
+                  <th className="text-right font-normal px-4 py-2">Qty</th>
+                  <th className="text-right font-normal px-4 py-2">Avg</th>
+                  <th className="text-right font-normal px-4 py-2">LTP</th>
+                  <th className="text-left font-normal px-4 py-2 hidden md:table-cell">Trend</th>
+                  <th className="text-right font-normal px-4 py-2">P/L</th>
+                  <th className="text-right font-normal px-4 py-2">Alloc</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHoldings.map((h, i) => {
+                  const up = h.pl >= 0;
+                  const allocPercent = totalValue > 0 ? (h.currentValue / totalValue) * 100 : 0;
+                  return (
+                    <motion.tr
+                      key={h.ticker}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      onClick={() => setSelectedHolding(h)}
+                      className="border-t border-border/40 hover:bg-card/40 transition cursor-pointer"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs text-muted-foreground">
+                          {h.company_name || h.ticker}
                         </div>
-                        <span className="font-mono text-xs tabular-nums w-8">
-                          {allocPercent.toFixed(0)}%
-                        </span>
-                      </div>
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        <div className="font-medium">{h.ticker}</div>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{h.quantity}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        ₹{h.avg_buy_price.toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        ₹{h.currentPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell w-[140px]">
+                        <Sparkline values={getDeterministicSparkline(h.ticker)} positive={up} />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div
+                          className={`inline-flex items-center gap-1 text-xs font-semibold ${up ? "text-[var(--bull)]" : "text-[var(--bear)]"}`}
+                        >
+                          {up ? (
+                            <ArrowUpRight className="w-3 h-3" />
+                          ) : (
+                            <ArrowDownRight className="w-3 h-3" />
+                          )}
+                          {up ? "+" : ""}₹
+                          {Math.abs(Math.round(h.pl)).toLocaleString("en-IN", {
+                            maximumFractionDigits: 0,
+                          })}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono">
+                          {up ? "+" : ""}
+                          {h.plPercent.toFixed(2)}%
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-2 justify-end">
+                          <div className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${allocPercent}%` }}
+                              transition={{ duration: 0.8, delay: i * 0.05 }}
+                              className="h-full bg-gradient-primary"
+                            />
+                          </div>
+                          <span className="font-mono text-xs tabular-nums w-8">
+                            {allocPercent.toFixed(0)}%
+                          </span>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -865,170 +897,17 @@ function Portfolio() {
   );
 }
 
-function PerformanceChart({ timeRange }: { timeRange: TimeRange }) {
-  const rangeData: Record<TimeRange, { points: number; label: string[] }> = {
-    "1W": { points: 7, label: ["Mon", "Tue", "Wed", "Thu", "Fri"] },
-    "1M": { points: 15, label: ["Week 1", "Week 2", "Week 3", "Week 4"] },
-    "3M": { points: 30, label: ["1M", "2M", "3M"] },
-    "1Y": { points: 50, label: ["Q1", "Q2", "Q3", "Q4"] },
-    ALL: { points: 40, label: ["2020", "2021", "2022", "2023", "2024"] },
-  };
-
-  const config = rangeData[timeRange];
-
-  const pts = (seed: number, numPoints: number) => {
-    const arr: string[] = [];
-    const baseGrowth =
-      timeRange === "1W"
-        ? 2
-        : timeRange === "1M"
-          ? 5
-          : timeRange === "3M"
-            ? 12
-            : timeRange === "1Y"
-              ? 25
-              : 40;
-    for (let i = 0; i < numPoints; i++) {
-      const x = (i / (numPoints - 1)) * 600;
-      const baseY = 120 - (i / numPoints) * baseGrowth;
-      const wave =
-        Math.sin(i / (numPoints / 6) + seed) * 8 + Math.cos(i / (numPoints / 4) + seed * 2) * 5;
-      const y = Math.max(20, baseY + wave + seed * 10);
-      arr.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-    }
-    return arr;
-  };
-
-  const portPts = pts(0, config.points);
-  const port = portPts.join(" ");
-
-  const niftyPts = pts(0.5, config.points).map((p, i) => {
-    const [x, y] = p.split(",").map(Number);
-    return `${x.toFixed(1)},${(y + 15 + i * 0.3).toFixed(1)}`;
-  });
-  const nifty = niftyPts.join(" ");
-
-  const polyPoints = portPts.map((p) => p.replace(",", " ")).join(" ");
-
-  const startPort = parseFloat(portPts[0].split(",")[1]);
-  const endPort = parseFloat(portPts[portPts.length - 1].split(",")[1]);
-  const portChange = (120 - endPort - (120 - startPort)).toFixed(1);
-
-  const startNifty = parseFloat(niftyPts[0].split(",")[1]);
-  const endNifty = parseFloat(niftyPts[niftyPts.length - 1].split(",")[1]);
-  const niftyChange = (135 - endNifty - (135 - startNifty)).toFixed(1);
-
+function PerformanceChart({ timeRange: _timeRange }: { timeRange: TimeRange }) {
   return (
-    <svg viewBox="0 0 600 180" className="w-full h-44">
-      <defs>
-        <linearGradient id="pgrad" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor="oklch(0.78 0.18 155)" stopOpacity="0.4" />
-          <stop offset="100%" stopColor="oklch(0.78 0.18 155)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-
-      {/* Y-axis labels */}
-      <text x="8" y="25" fill="oklch(0.5 0 0 / 0.4)" fontSize="9" fontFamily="monospace">
-        +40%
-      </text>
-      <text x="8" y="65" fill="oklch(0.5 0 0 / 0.4)" fontSize="9" fontFamily="monospace">
-        +20%
-      </text>
-      <text x="8" y="105" fill="oklch(0.5 0 0 / 0.4)" fontSize="9" fontFamily="monospace">
-        0%
-      </text>
-      <text x="8" y="145" fill="oklch(0.5 0 0 / 0.4)" fontSize="9" fontFamily="monospace">
-        -20%
-      </text>
-
-      {/* Grid lines */}
-      {[0, 1, 2, 3].map((g) => (
-        <line
-          key={g}
-          x1="30"
-          x2="600"
-          y1={30 + g * 40}
-          y2={30 + g * 40}
-          stroke="oklch(1 0 0 / 0.05)"
-        />
-      ))}
-
-      {/* X-axis labels */}
-      {config.label.map((label, i) => (
-        <text
-          key={i}
-          x={30 + i * (570 / (config.label.length - 1))}
-          y="172"
-          fill="oklch(0.5 0 0 / 0.4)"
-          fontSize="8"
-          fontFamily="monospace"
-          textAnchor="middle"
-        >
-          {label}
-        </text>
-      ))}
-
-      {/* Zero line */}
-      <line x1="30" x2="600" y1="105" y2="105" stroke="oklch(0.5 0 0 / 0.15)" strokeWidth="1" />
-
-      <polygon
-        points={`30,180 ${polyPoints.replace(/(\d+\.\d+),/g, (match, p1) => `${parseFloat(p1) + 30},`)} 630,180`}
-        fill="url(#pgrad)"
-        transform="translate(-30, 0)"
-      />
-
-      <motion.polyline
-        points={nifty}
-        fill="none"
-        stroke="oklch(0.5 0 250)"
-        strokeWidth="2"
-        strokeDasharray="6 4"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 1.6 }}
-      />
-      <motion.polyline
-        points={port}
-        fill="none"
-        stroke="oklch(0.78 0.18 155)"
-        strokeWidth="2.5"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 1.8, ease: "easeOut" }}
-      />
-
-      {/* End point labels */}
-      <circle
-        cx={600}
-        cy={parseFloat(portPts[portPts.length - 1].split(",")[1])}
-        r="4"
-        fill="oklch(0.78 0.18 155)"
-      />
-      <text
-        x="588"
-        y={parseFloat(portPts[portPts.length - 1].split(",")[1]) - 8}
-        fill="oklch(0.78 0.18 155)"
-        fontSize="10"
-        fontWeight="bold"
-      >
-        +{portChange}%
-      </text>
-
-      <circle
-        cx={600}
-        cy={parseFloat(niftyPts[niftyPts.length - 1].split(",")[1])}
-        r="4"
-        fill="oklch(0.5 0 250)"
-      />
-      <text
-        x="588"
-        y={parseFloat(niftyPts[niftyPts.length - 1].split(",")[1]) - 8}
-        fill="oklch(0.5 0 250)"
-        fontSize="10"
-        fontWeight="bold"
-      >
-        +{niftyChange}%
-      </text>
-    </svg>
+    <div className="flex flex-col items-center justify-center h-44 text-center">
+      <BarChart3 className="w-10 h-10 text-muted-foreground/40 mb-3" />
+      <p className="text-sm text-muted-foreground font-medium">
+        Portfolio history chart coming soon
+      </p>
+      <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">
+        We are tracking your daily portfolio value. Historical performance charts will be available
+        in a future update.
+      </p>
+    </div>
   );
 }

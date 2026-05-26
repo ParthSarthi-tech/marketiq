@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   User,
@@ -12,11 +13,15 @@ import {
   TrendingUp,
   ArrowRight,
   Wallet,
+  Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { resetPortfolio } from "@/lib/db";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/settings")({
   component: Settings,
@@ -64,9 +69,12 @@ const riskLabels: Record<string, string> = {
 
 function Settings() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
   const { data: profile } = useUserProfile(user?.id ?? null);
   const { holdings, cashBalance, totalValue } = usePortfolio(user?.id ?? null);
+
+  const [resetting, setResetting] = useState(false);
 
   const userName = user?.email?.split("@")[0] || "User";
   const riskLabel = profile?.risk_appetite
@@ -76,6 +84,30 @@ function Settings() {
   const handleSignOut = async () => {
     await signOut();
     navigate({ to: "/" });
+  };
+
+  const handleResetPortfolio = async () => {
+    if (!user?.id) return;
+    if (
+      !window.confirm(
+        "Reset your portfolio? This will clear all holdings and restore ₹2,50,000 virtual cash.",
+      )
+    )
+      return;
+    setResetting(true);
+    try {
+      await resetPortfolio(user.id);
+      queryClient.invalidateQueries({ queryKey: ["portfolio", user.id] });
+      queryClient.invalidateQueries({ queryKey: ["cashBalance", user.id] });
+      toast.success("Portfolio reset", {
+        description: "Your virtual portfolio has been reset to ₹2,50,000.",
+      });
+    } catch (e) {
+      console.error(e);
+      toast.error("Reset failed", { description: "Could not reset portfolio. Try again." });
+    } finally {
+      setResetting(false);
+    }
   };
 
   return (
@@ -113,7 +145,7 @@ function Settings() {
                       className="flex items-center justify-between p-3 rounded-2xl bg-card/40 border border-border/40 hover:border-primary/40 transition cursor-pointer group"
                       onClick={() => {
                         if (item.label === "Risk profile") navigate({ to: "/app/onboarding" });
-                        if (item.label === "Reset portfolio") navigate({ to: "/app/portfolio" });
+                        if (item.label === "Reset portfolio") handleResetPortfolio();
                         if (item.label === "Notifications") {
                           /* placeholder */
                         }
