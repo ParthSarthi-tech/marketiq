@@ -19,11 +19,17 @@ interface AIContextInput {
 
 export function useAI(context: () => AIContextInput) {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "ai", content: "Hi! I'm your MarketIQ advisor. Ask me about stocks, portfolio analysis, or investment strategies.", ts: Date.now() },
+    {
+      role: "ai",
+      content:
+        "Hi! I'm your MarketIQ advisor. Ask me about stocks, portfolio analysis, or investment strategies.",
+      ts: Date.now(),
+    },
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+  const systemPromptSent = useRef(false);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -35,12 +41,14 @@ export function useAI(context: () => AIContextInput) {
 
       try {
         const ctx = context();
-        const systemPrompt = buildSystemPrompt({
-          userProfile: ctx.userProfile,
-          portfolio: ctx.portfolio,
-          portfolioValue: ctx.portfolioValue,
-          cashBalance: ctx.cashBalance,
-        });
+        const systemPrompt = systemPromptSent.current
+          ? undefined
+          : buildSystemPrompt({
+              userProfile: ctx.userProfile,
+              portfolio: ctx.portfolio,
+              portfolioValue: ctx.portfolioValue,
+              cashBalance: ctx.cashBalance,
+            });
 
         const history = messagesRef.current.map((m) => ({
           role: (m.role === "user" ? "user" : "model") as "user" | "model",
@@ -50,6 +58,10 @@ export function useAI(context: () => AIContextInput) {
         const result = await chatWithAI({
           data: { message: content, systemPrompt, history },
         });
+
+        if (!systemPromptSent.current) {
+          systemPromptSent.current = true;
+        }
 
         if (result.error) {
           const errorMsg: Message = {
@@ -74,13 +86,19 @@ export function useAI(context: () => AIContextInput) {
         setIsLoading(false);
       }
     },
-    [context]
+    [context],
   );
 
   const clearChat = useCallback(() => {
     setMessages([
-      { role: "ai", content: "Hi! I'm your MarketIQ advisor. Ask me about stocks, portfolio analysis, or investment strategies.", ts: Date.now() },
+      {
+        role: "ai",
+        content:
+          "Hi! I'm your MarketIQ advisor. Ask me about stocks, portfolio analysis, or investment strategies.",
+        ts: Date.now(),
+      },
     ]);
+    systemPromptSent.current = false;
   }, []);
 
   return {

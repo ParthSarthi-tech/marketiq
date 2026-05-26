@@ -13,7 +13,7 @@ export async function getUserProfile(userId: string): Promise<QuizResponse | nul
 
 export async function saveQuizResponse(
   userId: string,
-  data: Omit<QuizResponse, "id" | "user_id" | "created_at">
+  data: Omit<QuizResponse, "id" | "user_id" | "created_at">,
 ): Promise<QuizResponse> {
   const { data: result, error } = await supabase
     .from("quiz_responses")
@@ -39,7 +39,7 @@ export async function saveQuizResponse(
 
 export async function updateQuizResponse(
   userId: string,
-  data: Partial<QuizResponse>
+  data: Partial<QuizResponse>,
 ): Promise<QuizResponse> {
   const { data: result, error } = await supabase
     .from("quiz_responses")
@@ -53,10 +53,7 @@ export async function updateQuizResponse(
 }
 
 export async function getUserPortfolio(userId: string): Promise<Portfolio[]> {
-  const { data, error } = await supabase
-    .from("portfolios")
-    .select("*")
-    .eq("user_id", userId);
+  const { data, error } = await supabase.from("portfolios").select("*").eq("user_id", userId);
 
   if (error) throw error;
   return data || [];
@@ -64,7 +61,7 @@ export async function getUserPortfolio(userId: string): Promise<Portfolio[]> {
 
 export async function addToPortfolio(
   userId: string,
-  holding: Omit<Portfolio, "id" | "user_id" | "created_at" | "updated_at">
+  holding: Omit<Portfolio, "id" | "user_id" | "created_at" | "updated_at">,
 ): Promise<Portfolio> {
   const existing = await supabase
     .from("portfolios")
@@ -114,7 +111,7 @@ export async function addToPortfolio(
 export async function removeFromPortfolio(
   userId: string,
   ticker: string,
-  quantity: number
+  quantity: number,
 ): Promise<void> {
   const existing = await supabase
     .from("portfolios")
@@ -128,10 +125,7 @@ export async function removeFromPortfolio(
   const newQty = existing.data.quantity - quantity;
 
   if (newQty <= 0) {
-    const { error } = await supabase
-      .from("portfolios")
-      .delete()
-      .eq("id", existing.data.id);
+    const { error } = await supabase.from("portfolios").delete().eq("id", existing.data.id);
     if (error) throw error;
   } else {
     const { error } = await supabase
@@ -158,7 +152,7 @@ export async function getTransactions(userId: string): Promise<Transaction[]> {
 
 export async function addTransaction(
   userId: string,
-  txn: Omit<Transaction, "id" | "user_id" | "created_at">
+  txn: Omit<Transaction, "id" | "user_id" | "created_at">,
 ): Promise<Transaction> {
   const { data, error } = await supabase
     .from("transactions")
@@ -179,24 +173,18 @@ export async function addTransaction(
 }
 
 export async function resetPortfolio(userId: string): Promise<void> {
-  const { error } = await supabase
-    .from("portfolios")
-    .delete()
-    .eq("user_id", userId);
+  const { error } = await supabase.from("portfolios").delete().eq("user_id", userId);
 
   if (error) throw error;
 }
 
 export async function getUserCashBalance(userId: string): Promise<number> {
   const profile = await getUserProfile(userId);
-  if (!profile) return 1000000;
+  if (!profile) return 250000;
   return profile.starting_balance;
 }
 
-export async function updateUserCashBalance(
-  userId: string,
-  newBalance: number
-): Promise<void> {
+export async function updateUserCashBalance(userId: string, newBalance: number): Promise<void> {
   await updateQuizResponse(userId, { starting_balance: newBalance });
 }
 
@@ -213,7 +201,7 @@ export async function getWatchlist(userId: string): Promise<Watchlist[]> {
 
 export async function addToWatchlist(
   userId: string,
-  item: Omit<Watchlist, "id" | "user_id" | "created_at">
+  item: Omit<Watchlist, "id" | "user_id" | "created_at">,
 ): Promise<Watchlist> {
   const { data, error } = await supabase
     .from("watchlist")
@@ -229,10 +217,7 @@ export async function addToWatchlist(
   return data;
 }
 
-export async function removeFromWatchlist(
-  userId: string,
-  ticker: string
-): Promise<void> {
+export async function removeFromWatchlist(userId: string, ticker: string): Promise<void> {
   const { error } = await supabase
     .from("watchlist")
     .delete()
@@ -242,10 +227,7 @@ export async function removeFromWatchlist(
   if (error) throw error;
 }
 
-export async function isInWatchlist(
-  userId: string,
-  ticker: string
-): Promise<boolean> {
+export async function isInWatchlist(userId: string, ticker: string): Promise<boolean> {
   const { data, error } = await supabase
     .from("watchlist")
     .select("id")

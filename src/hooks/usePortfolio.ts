@@ -1,6 +1,13 @@
 import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { getUserPortfolio, addToPortfolio, removeFromPortfolio, addTransaction, getUserCashBalance } from "@/lib/db";
+import {
+  getUserPortfolio,
+  addToPortfolio,
+  removeFromPortfolio,
+  addTransaction,
+  getUserCashBalance,
+  updateUserCashBalance,
+} from "@/lib/db";
 import { getQuotesBatch, type StockQuote } from "@/lib/upstox";
 import { resolveAnyKey } from "@/lib/instrumentResolver";
 import type { Portfolio } from "@/lib/supabase";
@@ -49,9 +56,9 @@ export function usePortfolio(userId: string | null) {
     staleTime: 30000,
   });
 
-  const { data: cashBalance = 1000000 } = useQuery({
+  const { data: cashBalance = 250000 } = useQuery({
     queryKey: ["cashBalance", userId],
-    queryFn: () => (userId ? getUserCashBalance(userId) : Promise.resolve(1000000)),
+    queryFn: () => (userId ? getUserCashBalance(userId) : Promise.resolve(250000)),
     enabled: !!userId,
   });
 
@@ -76,33 +83,46 @@ export function usePortfolio(userId: string | null) {
   });
 
   const totalValue = enrichedHoldings.reduce((sum, h) => sum + h.currentValue, 0);
-  const totalInvested = enrichedHoldings.reduce(
-    (sum, h) => sum + h.avg_buy_price * h.quantity,
-    0
-  );
+  const totalInvested = enrichedHoldings.reduce((sum, h) => sum + h.avg_buy_price * h.quantity, 0);
   const totalPL = totalValue - totalInvested;
   const totalPLPercent = totalInvested > 0 ? (totalPL / totalInvested) * 100 : 0;
 
   const addMutation = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       userId,
       ticker,
       companyName,
       quantity,
       price,
+      currentCash,
     }: {
       userId: string;
       ticker: string;
       companyName: string;
       quantity: number;
       price: number;
+      currentCash: number;
     }) => {
-      return addToPortfolio(userId, {
+      const totalCost = quantity * price;
+      if (totalCost > currentCash) {
+        throw new Error("Insufficient funds");
+      }
+      const result = await addToPortfolio(userId, {
         ticker,
         company_name: companyName,
         quantity,
         avg_buy_price: price,
       });
+      await addTransaction(userId, {
+        ticker,
+        company_name: companyName,
+        type: "buy",
+        quantity,
+        price,
+        total_amount: totalCost,
+      });
+      await updateUserCashBalance(userId, currentCash - totalCost);
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio", userId] });
@@ -116,14 +136,17 @@ export function usePortfolio(userId: string | null) {
       ticker,
       quantity,
       price,
+      currentCash,
     }: {
       userId: string;
       ticker: string;
       quantity: number;
       price: number;
+      currentCash: number;
     }) => {
       const holding = holdings.find((h) => h.ticker === ticker);
       if (!holding) throw new Error("Holding not found");
+      if (quantity > holding.quantity) throw new Error("Insufficient shares");
 
       await addTransaction(userId, {
         ticker,
@@ -134,7 +157,8 @@ export function usePortfolio(userId: string | null) {
         total_amount: quantity * price,
       });
 
-      return removeFromPortfolio(userId, ticker, quantity);
+      await removeFromPortfolio(userId, ticker, quantity);
+      await updateUserCashBalance(userId, currentCash + quantity * price);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio", userId] });
@@ -145,9 +169,17 @@ export function usePortfolio(userId: string | null) {
   const buy = useCallback(
     (ticker: string, companyName: string, quantity: number, price: number) => {
       if (!userId) return Promise.reject(new Error("Not authenticated"));
-      return addMutation.mutateAsync({ userId, ticker, companyName, quantity, price });
+      if (quantity * price > cashBalance) return Promise.reject(new Error("Insufficient funds"));
+      return addMutation.mutateAsync({
+        userId,
+        ticker,
+        companyName,
+        quantity,
+        price,
+        currentCash: cashBalance,
+      });
     },
-    [userId, addMutation]
+    [userId, cashBalance, addMutation],
   );
 
   const sell = useCallback(
@@ -160,16 +192,20 @@ export function usePortfolio(userId: string | null) {
         ticker,
         quantity,
         price,
+        currentCash: cashBalance,
       });
     },
-    [userId, holdings, sellMutation]
+    [userId, holdings, cashBalance, sellMutation],
   );
 
-  const sectorAllocation = enrichedHoldings.reduce((acc, h) => {
-    const sector = h.company_name?.split(" ")[0] || "Other";
-    acc[sector] = (acc[sector] || 0) + h.currentValue;
-    return acc;
-  }, {} as Record<string, number>);
+  const sectorAllocation = enrichedHoldings.reduce(
+    (acc, h) => {
+      const sector = h.company_name?.split(" ")[0] || "Other";
+      acc[sector] = (acc[sector] || 0) + h.currentValue;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   return {
     holdings: enrichedHoldings,
