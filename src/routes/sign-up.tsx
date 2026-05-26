@@ -7,9 +7,16 @@ export const Route = createFileRoute("/sign-up")({
   head: () => ({
     meta: [
       { title: "Get started — MarketIQ" },
-      { name: "description", content: "Create your free MarketIQ account. Virtual portfolio, AI advisor and Indian market lessons — built for first-time investors." },
+      {
+        name: "description",
+        content:
+          "Create your free MarketIQ account. Virtual portfolio, AI advisor and Indian market lessons — built for first-time investors.",
+      },
       { property: "og:title", content: "Get started — MarketIQ" },
-      { property: "og:description", content: "Two minutes to set up. A lifetime of clarity, confidence and compounding." },
+      {
+        property: "og:description",
+        content: "Two minutes to set up. A lifetime of clarity, confidence and compounding.",
+      },
     ],
   }),
 });
@@ -19,12 +26,20 @@ function SignUpPage() {
     <AuthShell
       side="up"
       eyebrow="Get started — free"
-      title={<>Open your <span className="text-gradient">MarketIQ</span> account.</>}
+      title={
+        <>
+          Open your <span className="text-gradient">MarketIQ</span> account.
+        </>
+      }
       subtitle="No credit card. Free virtual portfolio for life."
       footer={
         <>
           Already investing with us?{" "}
-          <Link to="/sign-in" className="text-foreground font-semibold hover:text-accent transition story-link">
+          <Link
+            to="/sign-in"
+            search={{ confirmed: undefined }}
+            className="text-foreground font-semibold hover:text-accent transition story-link"
+          >
             Sign in
           </Link>
         </>

@@ -39,7 +39,7 @@ export function AppShell() {
 
   useEffect(() => {
     if (initialized && !isAuthenticated) {
-      navigate({ to: "/sign-in" });
+      navigate({ to: "/sign-in", search: { confirmed: undefined } });
     }
   }, [initialized, isAuthenticated, navigate]);
 
@@ -311,7 +311,9 @@ export function AppShell() {
                 <Outlet />
               </motion.div>
             </AnimatePresence>
-            {loc.pathname !== "/app/onboarding" && loc.pathname !== "/app/settings" && <DisclosureFooter />}
+            {loc.pathname !== "/app/onboarding" && loc.pathname !== "/app/settings" && (
+              <DisclosureFooter />
+            )}
           </main>
         </div>
       </div>

@@ -299,16 +299,26 @@ async function fetchQuoteChunk(chunk: string[]): Promise<Record<string, StockQuo
       const close = quote.ohlc?.close || quote.last_price - change;
       const changePercent = close ? (change / close) * 100 : 0;
 
+      const lp = quote.last_price;
       result[originalKey] = {
         symbol,
-        lastPrice: quote.last_price,
+        lastPrice: lp,
         change,
         changePercent,
-        high: quote.ohlc?.high || quote.last_price,
-        low: quote.ohlc?.low || quote.last_price,
-        open: quote.ohlc?.open || quote.last_price,
+        high: quote.ohlc?.high || lp,
+        low: quote.ohlc?.low || lp,
+        open: quote.ohlc?.open || lp,
         close,
         volume: quote.volume,
+        timestamp: Date.now(),
+        c: lp,
+        d: change,
+        dp: changePercent,
+        h: quote.ohlc?.high || lp,
+        l: quote.ohlc?.low || lp,
+        o: quote.ohlc?.open || lp,
+        pc: close,
+        v: quote.volume,
       };
     }
   }

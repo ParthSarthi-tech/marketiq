@@ -66,6 +66,7 @@ export function Navbar() {
                 <>
                   <Link
                     to="/sign-in"
+                    search={{ confirmed: undefined }}
                     className="hidden sm:inline-flex text-sm text-muted-foreground hover:text-foreground px-4 py-2 transition"
                   >
                     Sign in
