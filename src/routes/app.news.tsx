@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { NewsCard, NewsCardSkeleton, NewsEmptyState } from "@/components/app/news-card";
@@ -23,6 +23,13 @@ function NewsPage() {
   const search = useSearch({ from: "/app/news" });
   const [sectorFilter, setSectorFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -43,12 +50,12 @@ function NewsPage() {
   const total = data?.total || 0;
   const totalPages = Math.min(Math.ceil(total / 12), 10);
 
-  const filtered = searchQuery.trim()
+  const filtered = debouncedQuery.trim()
     ? articles.filter(
         (a: NewsArticle) =>
-          a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          a.snippet?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          a.description?.toLowerCase().includes(searchQuery.toLowerCase()),
+          a.title.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+          a.snippet?.toLowerCase().includes(debouncedQuery.toLowerCase()) ||
+          a.description?.toLowerCase().includes(debouncedQuery.toLowerCase()),
       )
     : articles;
 
@@ -114,8 +121,8 @@ function NewsPage() {
       ) : filtered.length === 0 ? (
         <NewsEmptyState
           message={
-            searchQuery
-              ? `No news matching "${searchQuery}". Try a different search term.`
+            debouncedQuery
+              ? `No news matching "${debouncedQuery}". Try a different search term.`
               : "No news articles found for the selected filters."
           }
         />

@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import type { ScoreBreakdown as ScoreBreakdownType } from "@/lib/stockData";
 
 interface ScoreBreakdownProps {
   breakdown: ScoreBreakdownType;
+  defaultExpanded?: boolean;
 }
 
-export function ScoreBreakdown({ breakdown }: ScoreBreakdownProps) {
-  const [expanded, setExpanded] = useState(false);
+export function ScoreBreakdown({ breakdown, defaultExpanded }: ScoreBreakdownProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded ?? false);
 
   return (
     <div className="rounded-2xl bg-gradient-card border border-border/60 overflow-hidden">
@@ -59,6 +60,15 @@ function ScoreFactorRow({ factor }: { factor: ScoreBreakdownType["factors"][numb
     : factor.contribution < 0
       ? "var(--bear)"
       : "var(--gold)";
+  const [animate, setAnimate] = useState(false);
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      requestAnimationFrame(() => setAnimate(true));
+    }
+  }, []);
 
   return (
     <div className="rounded-xl bg-card/40 border border-border/40 p-3">
@@ -78,7 +88,7 @@ function ScoreFactorRow({ factor }: { factor: ScoreBreakdownType["factors"][numb
       <div className="h-1.5 rounded-full bg-card/50 mb-1.5 overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-700 ease-out"
-          style={{ width: `${barWidth}%`, backgroundColor: barColor, opacity: 0.7 }}
+          style={{ width: animate ? `${barWidth}%` : "0%", backgroundColor: barColor, opacity: 0.7 }}
         />
       </div>
 

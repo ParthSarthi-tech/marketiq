@@ -80,19 +80,29 @@ export function Sparkline({ values, positive = true }: { values: number[]; posit
     <svg viewBox={`0 0 ${w} ${h}`} className="mt-3 w-full h-12">
       <defs>
         <linearGradient id={`sg-${positive ? "u" : "d"}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={stroke} stopOpacity="0.4" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.35" />
           <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
+        <filter id={`glow-${positive ? "u" : "d"}`}>
+          <feGaussianBlur stdDeviation="2" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
       </defs>
       <polygon points={`0,${h} ${pts} ${w},${h}`} fill={`url(#sg-${positive ? "u" : "d"})`} />
       <motion.polyline
         points={pts}
         fill="none"
         stroke={stroke}
-        strokeWidth="1.5"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
         transition={{ duration: 1.4, ease: "easeOut" }}
+        filter={`url(#glow-${positive ? "u" : "d"})`}
       />
     </svg>
   );
