@@ -1,14 +1,17 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, ArrowUpRight, ArrowDownRight, BookOpen, Loader2, AlertTriangle, Newspaper, ChevronDown, Info, Zap, X, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, ArrowUpRight, ArrowDownRight, BookOpen, Loader2, AlertTriangle, Newspaper, ChevronDown, Info, Zap, X, RefreshCw, Plus, Check, Minus } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { useStockQuote } from "@/hooks/useStocks";
 import { loadStockDataAsync, getStockScore, getScoreBreakdown, getSignalLabel, type StockData } from "@/lib/stockData";
 import { ScoreBreakdown as ScoreBreakdownPanel } from "@/components/app/score-breakdown";
 import { fetchNews, tickerToMarketAuxSymbol, type NewsArticle } from "@/lib/news";
 import { NewsCard, NewsCardSkeleton } from "@/components/app/news-card";
+import { useAuth } from "@/hooks/useAuth";
+import { usePortfolio } from "@/hooks/usePortfolio";
+import { addQueuedOrder } from "@/lib/orderQueue";
 
 export const Route = createFileRoute("/app/analyze/$symbol")({
   component: StockAnalyze,
@@ -148,6 +151,20 @@ function StockAnalyze() {
   const [proMode, setProMode] = useState(() => typeof window !== 'undefined' && localStorage.getItem('proMode') === 'true');
   const [proDisclaimerDismissed, setProDisclaimerDismissed] = useState(false);
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
+  const [buyQty, setBuyQty] = useState(1);
+  const [buySuccess, setBuySuccess] = useState(false);
+  const [buyQueued, setBuyQueued] = useState(false);
+  const [showBuyConfirm, setShowBuyConfirm] = useState(false);
+
+  const { user } = useAuth();
+  const { buy, isBuying, cashBalance } = usePortfolio(user?.id ?? null);
+
+  const marketOpen = (() => {
+    const now = new Date();
+    const day = now.getDay();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    return day > 0 && day < 6 && mins >= 555 && mins < 930;
+  })();
 
   const toggleProMode = () => {
     setProMode(v => {
@@ -282,6 +299,118 @@ function StockAnalyze() {
           <ScoreBreakdownPanel key={String(proMode)} breakdown={breakdown} defaultExpanded={proMode} />
         </div>
       </div>
+
+      {/* Add to Portfolio */}
+      <div className="mx-6 mb-8">
+        <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <Plus className="w-5 h-5 text-primary" />
+            Add to Portfolio
+          </h3>
+          {!user ? (
+            <p className="text-sm text-muted-foreground">Sign in to add stocks to your portfolio.</p>
+          ) : buySuccess ? (
+            <div className="flex items-center gap-2 text-sm text-[var(--bull)]">
+              <Check className="w-4 h-4" />
+              {buyQueued
+                ? `Queued ${buyQty} share${buyQty > 1 ? "s" : ""} of ${symbol} — will execute next session`
+                : `Added ${buyQty} share${buyQty > 1 ? "s" : ""} of ${symbol} to your portfolio.`}
+              <button onClick={() => { setBuySuccess(false); setBuyQueued(false); }} className="text-xs text-muted-foreground hover:text-foreground ml-auto">Buy more</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setBuyQty(q => Math.max(1, q - 1))}
+                  className="w-8 h-8 rounded-lg bg-card/40 border border-border/40 flex items-center justify-center hover:bg-card/60 transition text-sm"
+                >
+                  <Minus className="w-3 h-3" />
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  value={buyQty}
+                  onChange={e => setBuyQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-16 text-center bg-card/40 border border-border/60 rounded-lg py-1.5 text-sm font-mono tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setBuyQty(q => q + 1)}
+                  className="w-8 h-8 rounded-lg bg-card/40 border border-border/40 flex items-center justify-center hover:bg-card/60 transition text-sm"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                × ₹{price.toLocaleString("en-IN")} ={" "}
+                <span className="font-semibold text-foreground font-mono">
+                  ₹{(buyQty * price).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowBuyConfirm(true)}
+                disabled={isBuying || price <= 0 || buyQty * price > cashBalance}
+                className="ml-auto inline-flex items-center gap-2 bg-gradient-primary text-primary-foreground px-5 py-2 rounded-xl text-sm font-semibold shadow-glow hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {isBuying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                {isBuying ? "Buying..." : `Buy ${buyQty}`}
+              </button>
+              {buyQty * price > cashBalance && (
+                <span className="text-xs text-[var(--bear)] w-full">Insufficient funds (₹{cashBalance.toLocaleString("en-IN", { maximumFractionDigits: 0 })} available)</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Buy Confirmation */}
+      {showBuyConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowBuyConfirm(false)}>
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60 max-w-sm w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="font-semibold mb-3">Confirm Purchase</h3>
+            <div className="text-sm text-muted-foreground space-y-2 mb-5">
+              <p>Buying <strong className="text-foreground">{buyQty}</strong> share{buyQty > 1 ? "s" : ""} of <strong className="text-foreground">{symbol}</strong> at <strong className="text-foreground">₹{price.toLocaleString("en-IN")}</strong> each.</p>
+              <p className="bg-[var(--gold)]/10 border border-[var(--gold)]/30 rounded-xl px-4 py-3 text-[var(--gold)] text-xs leading-relaxed">
+                <strong>Note:</strong> This is a virtual portfolio simulation. Orders placed outside market hours will be queued and executed at the next trading session.
+              </p>
+              <p className="text-xs">Total cost: <strong className="text-foreground font-mono">₹{(buyQty * price).toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong></p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowBuyConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-card/40 border border-border/40 hover:bg-card/60 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowBuyConfirm(false);
+                  try {
+                    setBuySuccess(false);
+                    setBuyQueued(false);
+                    if (marketOpen) {
+                      await buy(symbol, stockData.companyName, buyQty, price);
+                    } else {
+                      addQueuedOrder(symbol, stockData.companyName, "buy", buyQty, price);
+                      setBuyQueued(true);
+                    }
+                    setBuySuccess(true);
+                  } catch { /* handled */ }
+                }}
+                disabled={isBuying}
+                className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground py-2.5 rounded-xl text-sm font-semibold shadow-glow hover:opacity-90 disabled:opacity-40 transition"
+              >
+                {isBuying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                {isBuying ? "Buying..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fundamentals at a Glance */}
       <div className="mx-6 mb-8">

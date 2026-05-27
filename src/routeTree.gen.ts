@@ -24,6 +24,7 @@ import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppOnboardingRouteImport } from './routes/app.onboarding'
 import { Route as AppNewsRouteImport } from './routes/app.news'
 import { Route as AppLearnRouteImport } from './routes/app.learn'
+import { Route as AppHistoryRouteImport } from './routes/app.history'
 import { Route as AppDiscoverRouteImport } from './routes/app.discover'
 import { Route as AppAdvisorRouteImport } from './routes/app.advisor'
 import { Route as AppAnalyzeSymbolRouteImport } from './routes/app.analyze.$symbol'
@@ -103,6 +104,11 @@ const AppLearnRoute = AppLearnRouteImport.update({
   path: '/learn',
   getParentRoute: () => AppRoute,
 } as any)
+const AppHistoryRoute = AppHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDiscoverRoute = AppDiscoverRouteImport.update({
   id: '/discover',
   path: '/discover',
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/app/advisor': typeof AppAdvisorRoute
   '/app/discover': typeof AppDiscoverRoute
+  '/app/history': typeof AppHistoryRoute
   '/app/learn': typeof AppLearnRoute
   '/app/news': typeof AppNewsRoute
   '/app/onboarding': typeof AppOnboardingRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/app/advisor': typeof AppAdvisorRoute
   '/app/discover': typeof AppDiscoverRoute
+  '/app/history': typeof AppHistoryRoute
   '/app/learn': typeof AppLearnRoute
   '/app/news': typeof AppNewsRoute
   '/app/onboarding': typeof AppOnboardingRoute
@@ -170,6 +178,7 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/app/advisor': typeof AppAdvisorRoute
   '/app/discover': typeof AppDiscoverRoute
+  '/app/history': typeof AppHistoryRoute
   '/app/learn': typeof AppLearnRoute
   '/app/news': typeof AppNewsRoute
   '/app/onboarding': typeof AppOnboardingRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/app/advisor'
     | '/app/discover'
+    | '/app/history'
     | '/app/learn'
     | '/app/news'
     | '/app/onboarding'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/app/advisor'
     | '/app/discover'
+    | '/app/history'
     | '/app/learn'
     | '/app/news'
     | '/app/onboarding'
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/app/advisor'
     | '/app/discover'
+    | '/app/history'
     | '/app/learn'
     | '/app/news'
     | '/app/onboarding'
@@ -359,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLearnRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/history': {
+      id: '/app/history'
+      path: '/history'
+      fullPath: '/app/history'
+      preLoaderRoute: typeof AppHistoryRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/discover': {
       id: '/app/discover'
       path: '/discover'
@@ -386,6 +405,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAdvisorRoute: typeof AppAdvisorRoute
   AppDiscoverRoute: typeof AppDiscoverRoute
+  AppHistoryRoute: typeof AppHistoryRoute
   AppLearnRoute: typeof AppLearnRoute
   AppNewsRoute: typeof AppNewsRoute
   AppOnboardingRoute: typeof AppOnboardingRoute
@@ -399,6 +419,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAdvisorRoute: AppAdvisorRoute,
   AppDiscoverRoute: AppDiscoverRoute,
+  AppHistoryRoute: AppHistoryRoute,
   AppLearnRoute: AppLearnRoute,
   AppNewsRoute: AppNewsRoute,
   AppOnboardingRoute: AppOnboardingRoute,

@@ -108,6 +108,33 @@ export async function addToPortfolio(
   return data;
 }
 
+export async function updatePortfolioHolding(
+  userId: string,
+  ticker: string,
+  data: { avg_buy_price?: number; quantity?: number },
+): Promise<Portfolio> {
+  const existing = await supabase
+    .from("portfolios")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("ticker", ticker)
+    .maybeSingle();
+  if (!existing.data) throw new Error("Holding not found");
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (data.avg_buy_price !== undefined) updates.avg_buy_price = data.avg_buy_price;
+  if (data.quantity !== undefined) updates.quantity = data.quantity;
+
+  const { data: result, error } = await supabase
+    .from("portfolios")
+    .update(updates)
+    .eq("id", existing.data.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return result;
+}
+
 export async function removeFromPortfolio(
   userId: string,
   ticker: string,

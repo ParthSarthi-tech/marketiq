@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Sparkles,
   Plus,
@@ -14,6 +14,7 @@ import {
   TrendingUp,
   BarChart3,
   ArrowRight,
+  ChevronDown,
 } from "lucide-react";
 import { PageHeader, Sparkline } from "@/components/app/widgets";
 import { useAuth } from "@/hooks/useAuth";
@@ -21,6 +22,7 @@ import { useIndianStocks, useStockSearch } from "@/hooks/useStocks";
 import { useWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from "@/hooks/useWatchlist";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { loadStockData, getStockScore } from "@/lib/stockData";
+import { getStockSector } from "@/lib/stockMetadata";
 
 function getDeterministicSparkline(symbol: string): number[] {
   const stockData = loadStockData(symbol);
@@ -55,6 +57,21 @@ const filters = [
   { id: "momentum", label: "Momentum", icon: Flame },
 ];
 
+const SECTORS = [
+  "Automobile", "Chemicals", "Consumer Discretionary", "Consumer Durables",
+  "Energy", "Energy & Petrochemicals", "FMCG", "Financial Services",
+  "Healthcare", "Information Technology", "Infrastructure", "Metals & Mining",
+  "Services", "Telecommunication",
+];
+
+const SORT_OPTIONS = [
+  { id: "match", label: "Match Score" },
+  { id: "name", label: "Name A–Z" },
+  { id: "price", label: "Price (high)" },
+] as const;
+
+const PAGE_SIZE = 12;
+
 function Discover() {
   const { user } = useAuth();
   const { data: profile } = useUserProfile(user?.id ?? null);
@@ -64,15 +81,18 @@ function Discover() {
   const removeFromWatchlist = useRemoveFromWatchlist();
 
   const riskProfile = profile?.risk_appetite || "med-high";
-  const userGoal = profile?.goal || "wealth";
 
   const defaultFilter =
     riskProfile === "low" ? "defensive" : riskProfile === "high" ? "growth" : "all";
 
   const [active, setActive] = useState(defaultFilter);
+  const [sectorFilter, setSectorFilter] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string>("match");
+  const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [showSort, setShowSort] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -87,12 +107,39 @@ function Discover() {
 
   const watchlistTickers = new Set(watchlist.map((w) => w.ticker));
 
-  const filteredStocks =
-    allStocks?.filter((s) => {
-      const tags = s.tags || [];
-      if (active === "all") return s.featured;
-      return tags.includes(active);
+  const getMatchScore = useCallback((symbol: string) => {
+    const data = loadStockData(symbol);
+    if (data) {
+      return Math.min(99, Math.max(40, getStockScore(data)));
+    }
+    return 75;
+  }, []);
+
+  const filteredStocks = useMemo(() => {
+    let result = allStocks?.filter((s) => {
+      if (active !== "all") {
+        const tags = s.tags || [];
+        if (!tags.includes(active)) return false;
+      }
+      if (sectorFilter) {
+        if (getStockSector(s.symbol) !== sectorFilter) return false;
+      }
+      return true;
     }) || [];
+
+    result = [...result].sort((a, b) => {
+      if (sortBy === "name") return a.symbol.localeCompare(b.symbol);
+      if (sortBy === "price") return (b.quote?.c || 0) - (a.quote?.c || 0);
+      const scoreA = getMatchScore(a.symbol);
+      const scoreB = getMatchScore(b.symbol);
+      return scoreB - scoreA;
+    });
+
+    return result;
+  }, [allStocks, active, sectorFilter, sortBy]);
+
+  const paginated = filteredStocks.slice(0, page * PAGE_SIZE);
+  const hasMore = paginated.length < filteredStocks.length;
 
   const toggleWatchlist = (ticker: string, name: string) => {
     if (!user) return;
@@ -102,14 +149,6 @@ function Discover() {
       addToWatchlist.mutate({ userId: user.id, ticker, companyName: name });
     }
   };
-
-  const getMatchScore = useCallback((symbol: string) => {
-    const data = loadStockData(symbol);
-    if (data) {
-      return Math.min(99, Math.max(40, getStockScore(data)));
-    }
-    return 75;
-  }, []);
 
   return (
     <div>
@@ -188,14 +227,14 @@ function Discover() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-4">
         {filters.map((f) => {
           const Icon = f.icon;
           const on = active === f.id;
           return (
             <button
               key={f.id}
-              onClick={() => setActive(f.id)}
+              onClick={() => { setActive(f.id); setPage(1); }}
               className={`relative inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm transition ${on ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               {on && (
@@ -211,6 +250,62 @@ function Discover() {
             </button>
           );
         })}
+      </div>
+
+      {/* Sector + Sort bar */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          <button
+            onClick={() => { setSectorFilter(null); setPage(1); }}
+            className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-[10px] font-mono font-medium transition ${
+              !sectorFilter ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground bg-card/30"
+            }`}
+          >
+            All sectors
+          </button>
+          {SECTORS.map((s) => (
+            <button
+              key={s}
+              onClick={() => { setSectorFilter(s); setPage(1); }}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-[10px] font-mono font-medium transition ${
+                sectorFilter === s ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground bg-card/30"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <div className="relative ml-auto">
+          <button
+            onClick={() => setShowSort(!showSort)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-medium bg-card/30 text-muted-foreground hover:text-foreground transition"
+          >
+            {SORT_OPTIONS.find((o) => o.id === sortBy)?.label}
+            <ChevronDown className="w-3 h-3" />
+          </button>
+          <AnimatePresence>
+            {showSort && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="absolute right-0 mt-1 rounded-xl bg-card border border-border/60 shadow-xl overflow-hidden z-20 min-w-[140px]"
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => { setSortBy(o.id); setShowSort(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs transition ${
+                      sortBy === o.id ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {stocksLoading ? (
@@ -232,92 +327,113 @@ function Discover() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {filteredStocks.map((s, i) => {
-            const inWatchlist = watchlistTickers.has(s.symbol);
-            const up = (s.quote?.dp || 0) >= 0;
-            const match = getMatchScore(s.symbol);
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {paginated.map((s, i) => {
+              const inWatchlist = watchlistTickers.has(s.symbol);
+              const up = (s.quote?.dp || 0) >= 0;
+              const match = getMatchScore(s.symbol);
+              const sector = getStockSector(s.symbol);
 
-            return (
-              <motion.div
-                key={s.symbol}
-                layout
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06, duration: 0.5 }}
-                className="relative rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition overflow-hidden group"
-              >
-                <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-gradient-primary opacity-0 group-hover:opacity-10 blur-3xl transition" />
+              return (
+                <motion.div
+                  key={s.symbol}
+                  layout
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: (i % PAGE_SIZE) * 0.04, duration: 0.4 }}
+                  className="relative rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition overflow-hidden group"
+                >
+                  <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-gradient-primary opacity-0 group-hover:opacity-10 blur-3xl transition" />
 
-                <div className="flex items-start justify-between mb-3 relative">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
-                      NSE
+                  <div className="flex items-start justify-between mb-3 relative">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                          NSE
+                        </span>
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-card/60 text-muted-foreground">
+                          {sector}
+                        </span>
+                      </div>
+                      <div className="font-display text-xl font-semibold">{s.symbol}</div>
+                      <div className="text-xs text-muted-foreground">{s.name}</div>
                     </div>
-                    <div className="font-display text-xl font-semibold">{s.symbol}</div>
-                    <div className="text-xs text-muted-foreground">{s.name}</div>
+                    <div className="text-right">
+                      <div className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/15 text-primary text-xs font-semibold">
+                        <Sparkles className="w-3 h-3" /> {match}% match
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/15 text-primary text-xs font-semibold">
-                      <Sparkles className="w-3 h-3" /> {match}% match
+
+                  <div className="flex items-end justify-between mb-3 relative">
+                    <div>
+                      <div className="font-mono text-2xl font-semibold tabular-nums">
+                        ₹{s.quote?.c?.toLocaleString("en-IN", { minimumFractionDigits: 2 }) || "—"}
+                      </div>
+                      <div
+                        className={`text-xs font-semibold ${up ? "text-[var(--bull)]" : "text-[var(--bear)]"}`}
+                      >
+                        {up ? "+" : ""}
+                        {s.quote?.dp?.toFixed(2) || "0.00"}% today
+                      </div>
+                    </div>
+                    <div className="w-32">
+                      <Sparkline values={getDeterministicSparkline(s.symbol)} positive={up} />
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-end justify-between mb-3 relative">
-                  <div>
-                    <div className="font-mono text-2xl font-semibold tabular-nums">
-                      ₹{s.quote?.c?.toLocaleString("en-IN", { minimumFractionDigits: 2 }) || "—"}
-                    </div>
-                    <div
-                      className={`text-xs font-semibold ${up ? "text-[var(--bull)]" : "text-[var(--bear)]"}`}
+                  <p className="text-sm text-muted-foreground leading-relaxed mb-4 relative">
+                    {s.thesis}
+                  </p>
+
+                  <div className="flex gap-2 relative">
+                    <Link
+                      to="/app/analyze/$symbol"
+                      params={{ symbol: s.symbol }}
+                      className="flex-1 text-sm font-medium px-4 py-2.5 rounded-xl glass hover:bg-card/60 transition flex items-center justify-center gap-2"
                     >
-                      {up ? "+" : ""}
-                      {s.quote?.dp?.toFixed(2) || "0.00"}% today
-                    </div>
+                      <BarChart3 className="w-4 h-4" />
+                      Analyze
+                    </Link>
+                    <button
+                      onClick={() => toggleWatchlist(s.symbol, s.name)}
+                      disabled={addToWatchlist.isPending || removeFromWatchlist.isPending}
+                      className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition ${
+                        inWatchlist
+                          ? "bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/40"
+                          : "bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90"
+                      }`}
+                    >
+                      {inWatchlist ? (
+                        <>
+                          <Check className="w-4 h-4" /> Watching
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4" /> Watch
+                        </>
+                      )}
+                    </button>
                   </div>
-                  <div className="w-32">
-                    <Sparkline values={getDeterministicSparkline(s.symbol)} positive={up} />
-                  </div>
-                </div>
-
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4 relative">
-                  {s.thesis}
-                </p>
-
-                <div className="flex gap-2 relative">
-                  <Link
-                    to="/app/analyze/$symbol"
-                    params={{ symbol: s.symbol }}
-                    className="flex-1 text-sm font-medium px-4 py-2.5 rounded-xl glass hover:bg-card/60 transition flex items-center justify-center gap-2"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                    Analyze
-                  </Link>
-                  <button
-                    onClick={() => toggleWatchlist(s.symbol, s.name)}
-                    disabled={addToWatchlist.isPending || removeFromWatchlist.isPending}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition ${
-                      inWatchlist
-                        ? "bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/40"
-                        : "bg-gradient-primary text-primary-foreground shadow-glow hover:opacity-90"
-                    }`}
-                  >
-                    {inWatchlist ? (
-                      <>
-                        <Check className="w-4 h-4" /> Watching
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="w-4 h-4" /> Watch
-                      </>
-                    )}
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                </motion.div>
+              );
+            })}
+          </div>
+          {hasMore && (
+            <div className="flex justify-center mt-8">
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                className="inline-flex items-center gap-2 bg-gradient-card border border-border/60 px-6 py-3 rounded-xl text-sm font-semibold hover:border-primary/40 transition"
+              >
+                Load more ({filteredStocks.length - paginated.length} remaining)
+              </button>
+            </div>
+          )}
+          <div className="text-center text-[10px] font-mono text-muted-foreground mt-4">
+            Showing {paginated.length} of {filteredStocks.length} stocks
+          </div>
+        </>
       )}
     </div>
   );

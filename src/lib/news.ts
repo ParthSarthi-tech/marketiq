@@ -92,5 +92,5 @@ export function formatNewsDate(dateStr: string): string {
 }
 
 export function tickerToMarketAuxSymbol(ticker: string): string {
-  return `${ticker}.BSE`;
+  return ticker;
 }

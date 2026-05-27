@@ -7,6 +7,7 @@ import {
   addTransaction,
   getUserCashBalance,
   updateUserCashBalance,
+  updatePortfolioHolding,
 } from "@/lib/db";
 import { getQuotesBatch, type StockQuote } from "@/lib/upstox";
 import { resolveAnyKey } from "@/lib/instrumentResolver";
@@ -259,6 +260,32 @@ export function usePortfolio(userId: string | null) {
     [userId, holdings, cashBalance, sellMutation],
   );
 
+  const editHolding = useCallback(
+    (ticker: string, data: { avg_buy_price?: number; quantity?: number }) => {
+      if (!userId) return Promise.reject(new Error("Not authenticated"));
+      return updatePortfolioHolding(userId, ticker, data).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["portfolio", userId] });
+      });
+    },
+    [userId, queryClient],
+  );
+
+  const deleteHolding = useCallback(
+    (ticker: string) => {
+      if (!userId) return Promise.reject(new Error("Not authenticated"));
+      const holding = holdings.find((h) => h.ticker === ticker);
+      if (!holding) return Promise.reject(new Error("Holding not found"));
+      return sellMutation.mutateAsync({
+        userId,
+        ticker,
+        quantity: holding.quantity,
+        price: holding.avg_buy_price,
+        currentCash: cashBalance,
+      });
+    },
+    [userId, holdings, cashBalance, sellMutation],
+  );
+
   const sectorAllocation = enrichedHoldings.reduce(
     (acc, h) => {
       const sector = getStockSector(h.ticker);
@@ -279,6 +306,8 @@ export function usePortfolio(userId: string | null) {
     loading: holdingsLoading || quotesLoading,
     buy,
     sell,
+    editHolding,
+    deleteHolding,
     isBuying: addMutation.isPending,
     isSelling: sellMutation.isPending,
   };

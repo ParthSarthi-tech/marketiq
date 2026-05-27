@@ -14,6 +14,7 @@ import {
   BarChart3,
   ExternalLink,
   Clock,
+  Pencil,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader, StatCard, CountUp, Sparkline } from "@/components/app/widgets";
@@ -22,7 +23,14 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { STOCK_CONFIG, getStockSector } from "@/lib/stockMetadata";
 import { getQuotesBatch } from "@/lib/upstox";
 import { getResolvedKey } from "@/lib/instrumentResolver";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import {
+  getQueuedOrders,
+  addQueuedOrder,
+  cancelQueuedOrder,
+  executeQueuedOrders,
+  type QueuedOrder,
+} from "@/lib/orderQueue";
 
 function getDeterministicSparkline(symbol: string): number[] {
   const hash = symbol.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -94,15 +102,21 @@ export const Route = createFileRoute("/app/portfolio")({
 });
 
 const SECTOR_COLORS: Record<string, string> = {
-  IT: "oklch(0.78 0.18 155)",
-  Banking: "oklch(0.85 0.16 90)",
-  Energy: "oklch(0.68 0.20 195)",
-  NBFC: "oklch(0.72 0.22 320)",
+  Automobile: "oklch(0.58 0.24 15)",
+  Chemicals: "oklch(0.60 0.20 310)",
+  "Consumer Discretionary": "oklch(0.72 0.20 95)",
+  "Consumer Durables": "oklch(0.70 0.22 135)",
+  Energy: "oklch(0.62 0.22 55)",
+  "Energy & Petrochemicals": "oklch(0.60 0.18 200)",
   FMCG: "oklch(0.75 0.18 60)",
-  "Capital Goods": "oklch(0.70 0.18 260)",
-  Telecom: "oklch(0.65 0.18 280)",
-  Pharma: "oklch(0.72 0.18 160)",
-  default: "oklch(0.6 0.15 200)",
+  "Financial Services": "oklch(0.74 0.24 40)",
+  Healthcare: "oklch(0.70 0.22 155)",
+  "Information Technology": "oklch(0.78 0.20 145)",
+  Infrastructure: "oklch(0.68 0.20 260)",
+  "Metals & Mining": "oklch(0.55 0.18 40)",
+  Services: "oklch(0.58 0.20 220)",
+  Telecommunication: "oklch(0.65 0.20 280)",
+  default: "oklch(0.5 0.08 200)",
 };
 
 function Portfolio() {
@@ -118,6 +132,8 @@ function Portfolio() {
     loading,
     buy,
     sell,
+    editHolding,
+    deleteHolding,
     isBuying,
     isSelling,
   } = usePortfolio(user?.id ?? null);
@@ -132,12 +148,41 @@ function Portfolio() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showStockDropdown, setShowStockDropdown] = useState(false);
   const [filterSector, setFilterSector] = useState<string | null>(null);
+  const [showSectorDropdown, setShowSectorDropdown] = useState(false);
   const [selectedHolding, setSelectedHolding] = useState<(typeof holdings)[0] | null>(null);
   const [holdingQuantity, setHoldingQuantity] = useState(1);
-  const [holdingAction, setHoldingAction] = useState<"buy" | "sell">("buy");
+  const [holdingAction, setHoldingAction] = useState<"buy" | "sell" | null>(null);
   const [performingAction, setPerformingAction] = useState(false);
+  const [showEditHolding, setShowEditHolding] = useState(false);
+  const [editAvgPrice, setEditAvgPrice] = useState<number | "">("");
+  const [editQuantity, setEditQuantity] = useState<number | "">("");
+  const [editing, setEditing] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRange>("3M");
+  const [targetPcts, setTargetPcts] = useState<Record<string, number>>({});
   const marketStatus = isMarketOpen();
+  const [orders, setOrders] = useState<QueuedOrder[]>([]);
+  const [executedCount, setExecutedCount] = useState(0);
+
+  useEffect(() => {
+    setOrders(getQueuedOrders());
+  }, []);
+
+  useEffect(() => {
+    if (!marketStatus.open) return;
+    const pending = getQueuedOrders().filter((o) => o.status === "queued");
+    if (pending.length === 0) return;
+    const count = executeQueuedOrders(buy, sell);
+    if (count > 0) {
+      setExecutedCount(count);
+      setOrders(getQueuedOrders());
+    }
+  }, [marketStatus.open]);
+
+  useEffect(() => {
+    if (executedCount === 0) return;
+    const t = setTimeout(() => setExecutedCount(0), 5000);
+    return () => clearTimeout(t);
+  }, [executedCount]);
 
   const filteredHoldings = filterSector
     ? holdings.filter((h) => getStockSector(h.ticker) === filterSector)
@@ -203,7 +248,18 @@ function Portfolio() {
     if (!user?.id || !selectedStock || effectivePrice <= 0 || totalCost > cashBalance) return;
     setBuying(true);
     try {
-      await buy(selectedStock.ticker, selectedStock.name, quantity, effectivePrice);
+      if (marketStatus.open) {
+        await buy(selectedStock.ticker, selectedStock.name, quantity, effectivePrice);
+      } else {
+        addQueuedOrder(
+          selectedStock.ticker,
+          selectedStock.name,
+          "buy",
+          quantity,
+          effectivePrice,
+        );
+        setOrders(getQueuedOrders());
+      }
       setShowAddModal(false);
       setSelectedStock(null);
       setQuantity(10);
@@ -227,6 +283,13 @@ function Portfolio() {
     color: SECTOR_COLORS[label] || SECTOR_COLORS.default,
   }));
 
+  useEffect(() => {
+    if (Object.keys(targetPcts).length > 0) return;
+    if (sectorData.length === 0) return;
+    const eq = 100 / sectorData.length;
+    setTargetPcts(Object.fromEntries(sectorData.map((s) => [s.label, eq])));
+  }, [sectorData.length]);
+
   return (
     <div>
       <PageHeader
@@ -239,33 +302,35 @@ function Portfolio() {
         subtitle={`${holdings.length} holdings · ₹${cashBalance.toLocaleString("en-IN")} cash available`}
         action={
           <div className="flex gap-2">
-            <div className="relative">
-              <button
-                onClick={() => setFilterSector(filterSector ? null : sectors[0])}
-                className={`inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition ${filterSector ? "bg-primary/20 text-primary" : ""}`}
-              >
-                <Filter className="w-4 h-4" /> {filterSector || "Filter"}
-              </button>
-              {sectors.length > 1 && !filterSector && (
-                <div className="absolute top-full right-0 mt-2 bg-background border border-border/60 rounded-xl shadow-lg overflow-hidden z-20">
-                  {sectors.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setFilterSector(s)}
-                      className="w-full px-4 py-2 text-left text-sm hover:bg-card/60 transition"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setFilterSector(null)}
-                    className="w-full px-4 py-2 text-left text-sm text-muted-foreground hover:bg-card/60 border-t"
-                  >
-                    Clear filter
-                  </button>
-                </div>
-              )}
-            </div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowSectorDropdown(!showSectorDropdown)}
+                  className={`inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition ${filterSector ? "bg-primary/20 text-primary border border-primary/30" : ""}`}
+                >
+                  <Filter className="w-4 h-4" /> {filterSector || "Filter"}
+                </button>
+                {showSectorDropdown && (
+                  <div className="absolute top-full right-0 mt-2 bg-background border border-border/60 rounded-xl shadow-lg overflow-hidden z-20 min-w-[200px]">
+                    {sectors.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => { setFilterSector(s); setShowSectorDropdown(false); }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-card/60 transition ${filterSector === s ? "bg-primary/10 text-primary font-medium" : ""}`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                    {filterSector && (
+                      <button
+                        onClick={() => { setFilterSector(null); setShowSectorDropdown(false); }}
+                        className="w-full px-4 py-2 text-left text-sm text-muted-foreground hover:bg-card/60 border-t border-border/40"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             <button
               onClick={handleExport}
               className="inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition"
@@ -409,6 +474,104 @@ function Portfolio() {
           </div>
         </div>
 
+        {/* Orders section */}
+        <div className="rounded-3xl bg-gradient-card border border-border/60 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <div className="font-semibold">Orders</div>
+              {orders.filter((o) => o.status === "queued").length > 0 && (
+                <span className="text-[10px] font-mono bg-primary/20 text-primary px-2 py-0.5 rounded-full">
+                  {orders.filter((o) => o.status === "queued").length} pending
+                </span>
+              )}
+            </div>
+            {executedCount > 0 && (
+              <span className="text-xs text-[var(--bull)]">
+                {executedCount} order{executedCount > 1 ? "s" : ""} auto-executed
+              </span>
+            )}
+          </div>
+
+          {orders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Clock className="w-6 h-6 text-muted-foreground mb-2" />
+              <p className="text-sm text-muted-foreground">No orders yet</p>
+              {!marketStatus.open && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Orders placed while markets are closed will queue here
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+              {orders.map((order) => (
+                <div
+                  key={order.id}
+                  className={`flex items-center gap-3 p-3 rounded-xl border text-sm ${
+                    order.status === "queued"
+                      ? "border-yellow-500/20 bg-yellow-500/5"
+                      : order.status === "executed"
+                        ? "border-[var(--bull)]/20 bg-[var(--bull)]/5"
+                        : "border-border/40 bg-card/40"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {order.ticker}
+                      </span>
+                      <span
+                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                          order.type === "buy"
+                            ? "bg-[var(--bull)]/10 text-[var(--bull)]"
+                            : "bg-[var(--bear)]/10 text-[var(--bear)]"
+                        }`}
+                      >
+                        {order.type.toUpperCase()}
+                      </span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                          order.status === "queued"
+                            ? "bg-yellow-500/10 text-yellow-500"
+                            : order.status === "executed"
+                              ? "bg-[var(--bull)]/10 text-[var(--bull)]"
+                              : "bg-muted/30 text-muted-foreground"
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {order.quantity} × ₹{order.price.toLocaleString("en-IN")}
+                      <span className="mx-1">·</span>
+                      ₹{order.totalCost.toLocaleString("en-IN")}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground/60">
+                      {new Date(order.createdAt).toLocaleString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                  {order.status === "queued" && (
+                    <button
+                      onClick={() => {
+                        cancelQueuedOrder(order.id);
+                        setOrders(getQueuedOrders());
+                      }}
+                      className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg border border-border/40 hover:border-border"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Performance chart */}
         <div className="lg:col-span-2 rounded-3xl p-6 bg-gradient-card border border-border/60">
           <div className="flex items-center justify-between mb-2">
@@ -448,6 +611,112 @@ function Portfolio() {
             </span>
           </div>
         </div>
+      </div>
+
+      {/* Rebalancing Tool */}
+      <div className="rounded-3xl bg-gradient-card border border-border/60 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="font-semibold">Rebalancing</div>
+          <button
+            onClick={() => {
+              const equal = 100 / sectorData.length;
+              setTargetPcts(Object.fromEntries(sectorData.map((s) => [s.label, equal])));
+            }}
+            className="text-[10px] font-mono text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg border border-border/40"
+          >
+            Equal weight
+          </button>
+        </div>
+
+        {sectorData.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-4 text-center">
+            Add holdings to see rebalancing suggestions.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider font-mono text-muted-foreground">
+                  <th className="text-left font-normal px-3 py-2">Sector</th>
+                  <th className="text-right font-normal px-3 py-2">Current</th>
+                  <th className="text-right font-normal px-3 py-2">Target</th>
+                  <th className="text-right font-normal px-3 py-2">Diff</th>
+                  <th className="text-right font-normal px-3 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sectorData.map((s) => {
+                  const target = targetPcts[s.label] ?? 0;
+                  const diff = target - s.pct;
+                  const action = diff > 0.5 ? "Buy" : diff < -0.5 ? "Sell" : "—";
+                  const value = (target / 100) * totalValue;
+                  const currentValue = (s.pct / 100) * totalValue;
+                  const needValue = Math.abs(value - currentValue);
+                  return (
+                    <motion.tr
+                      key={s.label}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="border-t border-border/40"
+                    >
+                      <td className="px-3 py-2.5">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-sm" style={{ background: s.color }} />
+                          <span className="text-xs">{s.label}</span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                        {s.pct.toFixed(1)}%
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <input
+                          type="number"
+                          value={targetPcts[s.label]?.toFixed(1) ?? ""}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            setTargetPcts((prev) => ({
+                              ...prev,
+                              [s.label]: isNaN(v) ? 0 : v,
+                            }));
+                          }}
+                          className="w-16 text-right bg-background/50 border border-border/60 rounded-lg py-1 px-2 text-xs font-mono tabular-nums text-foreground focus:outline-none focus:border-primary/50"
+                          step="0.5"
+                        />
+                      </td>
+                      <td
+                        className={`px-3 py-2.5 text-right tabular-nums text-xs font-medium ${
+                          Math.abs(diff) < 0.5
+                            ? "text-muted-foreground"
+                            : diff > 0
+                              ? "text-[var(--bull)]"
+                              : "text-[var(--bear)]"
+                        }`}
+                      >
+                        {diff > 0 ? "+" : ""}
+                        {diff.toFixed(1)}%
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {action !== "—" ? (
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
+                              action === "Buy"
+                                ? "bg-[var(--bull)]/10 text-[var(--bull)]"
+                                : "bg-[var(--bear)]/10 text-[var(--bear)]"
+                            }`}
+                          >
+                            {action} ~₹{needValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </motion.tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Holdings table */}
@@ -706,19 +975,29 @@ function Portfolio() {
                   )}
                 </div>
 
+                {!marketStatus.open && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/30">
+                    <Clock className="w-4 h-4 text-[var(--gold)] shrink-0" />
+                    <span className="text-xs text-[var(--gold)]">Market closed — order will be queued</span>
+                  </div>
+                )}
+
                 <button
                   onClick={handleBuy}
                   disabled={
                     !selectedStock ||
                     effectivePrice <= 0 ||
                     totalCost > cashBalance ||
-                    buying ||
-                    !marketStatus.open
+                    buying
                   }
                   className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   {buying ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  {buying ? "Processing..." : `Buy ${quantity} Share${quantity > 1 ? "s" : ""}`}
+                  {buying
+                    ? "Processing..."
+                    : marketStatus.open
+                      ? `Buy ${quantity} Share${quantity > 1 ? "s" : ""}`
+                      : `Queue ${quantity} Share${quantity > 1 ? "s" : ""}`}
                 </button>
               </div>
             </motion.div>
@@ -819,37 +1098,44 @@ function Portfolio() {
               </div>
 
               {/* Buy/Sell Actions */}
-              {!marketStatus.open && (
-                <div className="text-center text-sm text-muted-foreground mb-4">
-                  Trading disabled until market opens
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => {
                     setHoldingAction("buy");
                     setHoldingQuantity(1);
+                    setShowEditHolding(false);
                   }}
                   disabled={!marketStatus.open}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/30 hover:bg-[var(--bull)]/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/30 hover:bg-[var(--bull)]/20 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
-                  <Plus className="w-4 h-4" /> Buy More
+                  <Plus className="w-4 h-4" /> Buy
                 </button>
                 <button
                   onClick={() => {
                     setHoldingAction("sell");
                     setHoldingQuantity(1);
+                    setShowEditHolding(false);
                   }}
                   disabled={!marketStatus.open}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bear)]/15 text-[var(--bear)] border border-[var(--bear)]/30 hover:bg-[var(--bear)]/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bear)]/15 text-[var(--bear)] border border-[var(--bear)]/30 hover:bg-[var(--bear)]/20 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   <TrendingDown className="w-4 h-4" /> Sell
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEditHolding(!showEditHolding);
+                    setHoldingAction(null);
+                    setEditAvgPrice(selectedHolding.avg_buy_price);
+                    setEditQuantity(selectedHolding.quantity);
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-card/50 border border-border/40 hover:bg-card/80 transition text-sm"
+                >
+                  <Pencil className="w-4 h-4" /> Edit
                 </button>
               </div>
 
               {/* Quick Actions Form */}
-              {(holdingAction === "buy" || holdingAction === "sell") && marketStatus.open && (
+              {holdingAction && marketStatus.open && !showEditHolding && (
                 <div className="mt-4 p-4 rounded-xl bg-card/50 border border-border/40">
                   <div className="flex items-center gap-2 mb-3">
                     <button
@@ -894,19 +1180,30 @@ function Portfolio() {
                       if (!user?.id) return;
                       setPerformingAction(true);
                       try {
-                        if (holdingAction === "buy") {
-                          await buy(
+                        if (marketStatus.open) {
+                          if (holdingAction === "buy") {
+                            await buy(
+                              selectedHolding.ticker,
+                              selectedHolding.company_name || selectedHolding.ticker,
+                              holdingQuantity,
+                              selectedHolding.currentPrice,
+                            );
+                          } else {
+                            await sell(
+                              selectedHolding.ticker,
+                              holdingQuantity,
+                              selectedHolding.currentPrice,
+                            );
+                          }
+                        } else {
+                          addQueuedOrder(
                             selectedHolding.ticker,
                             selectedHolding.company_name || selectedHolding.ticker,
+                            holdingAction,
                             holdingQuantity,
                             selectedHolding.currentPrice,
                           );
-                        } else {
-                          await sell(
-                            selectedHolding.ticker,
-                            holdingQuantity,
-                            selectedHolding.currentPrice,
-                          );
+                          setOrders(getQueuedOrders());
                         }
                         setSelectedHolding(null);
                       } catch (e) {
@@ -928,6 +1225,97 @@ function Portfolio() {
                       ? `Buy ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
                       : `Sell ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`}
                   </button>
+                </div>
+              )}
+
+              {/* Edit Holding Form */}
+              {showEditHolding && (
+                <div className="mt-4 p-4 rounded-xl bg-card/50 border border-border/40">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold">Edit Holding</span>
+                    <button
+                      onClick={() => setShowEditHolding(false)}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono block mb-1">
+                        Avg. Buy Price
+                      </label>
+                      <input
+                        type="number"
+                        value={editAvgPrice}
+                        onChange={(e) =>
+                          setEditAvgPrice(e.target.value === "" ? "" : parseFloat(e.target.value))
+                        }
+                        className="w-full bg-background/50 border border-border/60 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono block mb-1">
+                        Quantity
+                      </label>
+                      <input
+                        type="number"
+                        value={editQuantity}
+                        onChange={(e) =>
+                          setEditQuantity(e.target.value === "" ? "" : parseInt(e.target.value))
+                        }
+                        className="w-full bg-background/50 border border-border/60 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!user?.id || editAvgPrice === "" || editQuantity === "") return;
+                        setEditing(true);
+                        try {
+                          await editHolding(selectedHolding.ticker, {
+                            avg_buy_price: editAvgPrice as number,
+                            quantity: editQuantity as number,
+                          });
+                          setSelectedHolding(null);
+                        } catch (e) {
+                          console.error(e);
+                        } finally {
+                          setEditing(false);
+                        }
+                      }}
+                      disabled={
+                        editing ||
+                        editAvgPrice === "" ||
+                        editQuantity === "" ||
+                        (editAvgPrice as number) <= 0 ||
+                        (editQuantity as number) < 0
+                      }
+                      className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {editing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      Save Changes
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!user?.id) return;
+                        setEditing(true);
+                        try {
+                          await deleteHolding(selectedHolding.ticker);
+                          setSelectedHolding(null);
+                        } catch (e) {
+                          console.error(e);
+                        } finally {
+                          setEditing(false);
+                        }
+                      }}
+                      disabled={editing}
+                      className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-[var(--bear)]/15 text-[var(--bear)] border border-[var(--bear)]/30 hover:bg-[var(--bear)]/25 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <TrendingDown className="w-4 h-4" /> Delete All
+                    </button>
+                  </div>
                 </div>
               )}
 
