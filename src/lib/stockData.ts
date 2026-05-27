@@ -35,6 +35,23 @@ export interface StockData {
   priceAvg200?: number;
 }
 
+export interface ScoreFactor {
+  label: string;
+  value: string;
+  contribution: number;
+  maxContribution: number;
+  detail: string;
+  positive: boolean;
+}
+
+export interface ScoreBreakdown {
+  total: number;
+  rawScore: number;
+  signal: "buy" | "hold" | "sell";
+  factors: ScoreFactor[];
+  summary: string;
+}
+
 const csvCache = new Map<string, StockData>();
 
 async function loadFromCSV(symbol: string): Promise<StockData | null> {
@@ -574,84 +591,168 @@ export async function preloadAllStockData(): Promise<void> {
   await Promise.all(promises);
 }
 
-export function getStockScore(data: StockData): number {
+export function getScoreBreakdown(data: StockData): ScoreBreakdown {
+  const factors: ScoreFactor[] = [];
   let score = 45;
 
-  if (data.trends.salesGrowth > 20) score += 12;
-  else if (data.trends.salesGrowth > 15) score += 10;
-  else if (data.trends.salesGrowth > 10) score += 7;
-  else if (data.trends.salesGrowth > 5) score += 3;
-  else if (data.trends.salesGrowth < 0) score -= 8;
+  let sgContrib = 0;
+  if (data.trends.salesGrowth > 20) sgContrib = 12;
+  else if (data.trends.salesGrowth > 15) sgContrib = 10;
+  else if (data.trends.salesGrowth > 10) sgContrib = 7;
+  else if (data.trends.salesGrowth > 5) sgContrib = 3;
+  else if (data.trends.salesGrowth < 0) sgContrib = -8;
+  score += sgContrib;
+  factors.push({
+    label: "Revenue Growth",
+    value: `${data.trends.salesGrowth.toFixed(1)}%`,
+    contribution: sgContrib,
+    maxContribution: 12,
+    detail: sgContrib > 0
+      ? `Revenue grew ${data.trends.salesGrowth.toFixed(1)}% YoY — ${sgContrib >= 12 ? "exceptional growth above 20%" : sgContrib >= 10 ? "strong growth above 15%" : sgContrib >= 7 ? "decent growth above 10%" : "modest growth above 5%"}`
+      : sgContrib < 0
+        ? `Revenue declined ${Math.abs(data.trends.salesGrowth).toFixed(1)}% — negative growth penalized`
+        : `Revenue grew ${data.trends.salesGrowth.toFixed(1)}% — below 5% threshold`,
+    positive: sgContrib >= 0,
+  });
 
-  if (data.currentOPM > 50) score += 10;
-  else if (data.currentOPM > 40) score += 8;
-  else if (data.currentOPM > 25) score += 5;
-  else if (data.currentOPM > 15) score += 2;
-  else if (data.currentOPM < 10) score -= 5;
+  let opmContrib = 0;
+  if (data.currentOPM > 50) opmContrib = 10;
+  else if (data.currentOPM > 40) opmContrib = 8;
+  else if (data.currentOPM > 25) opmContrib = 5;
+  else if (data.currentOPM > 15) opmContrib = 2;
+  else if (data.currentOPM < 10) opmContrib = -5;
+  score += opmContrib;
+  factors.push({
+    label: "Operating Margin",
+    value: `${data.currentOPM.toFixed(1)}%`,
+    contribution: opmContrib,
+    maxContribution: 10,
+    detail: opmContrib > 0
+      ? `OPM at ${data.currentOPM.toFixed(1)}% — ${opmContrib >= 10 ? "exceptional above 50%" : opmContrib >= 8 ? "strong above 40%" : opmContrib >= 5 ? "healthy above 25%" : "decent above 15%"}`
+      : opmContrib < 0
+        ? `OPM at ${data.currentOPM.toFixed(1)}% — weak margins below 10%`
+        : `OPM at ${data.currentOPM.toFixed(1)}% — moderate between 10-15%`,
+    positive: opmContrib >= 0,
+  });
 
-  if (data.currentPE < 12) score += 12;
-  else if (data.currentPE < 18) score += 8;
-  else if (data.currentPE < 25) score += 4;
-  else if (data.currentPE < 35) score -= 5;
-  else if (data.currentPE > 40) score -= 10;
+  let peContrib = 0;
+  if (data.currentPE < 12) peContrib = 12;
+  else if (data.currentPE < 18) peContrib = 8;
+  else if (data.currentPE < 25) peContrib = 4;
+  else if (data.currentPE < 35) peContrib = -5;
+  else if (data.currentPE > 40) peContrib = -10;
+  score += peContrib;
+  factors.push({
+    label: "P/E Ratio",
+    value: `${data.currentPE.toFixed(1)}x`,
+    contribution: peContrib,
+    maxContribution: 12,
+    detail: peContrib > 0
+      ? `P/E of ${data.currentPE.toFixed(1)}x — ${peContrib >= 12 ? "very attractive below 12" : peContrib >= 8 ? "attractive below 18" : "reasonable below 25"}`
+      : peContrib < 0
+        ? `P/E of ${data.currentPE.toFixed(1)}x — ${peContrib <= -10 ? "expensive above 40" : "elevated above 35"}`
+        : `P/E of ${data.currentPE.toFixed(1)}x — neutral, between 25-35`,
+    positive: peContrib >= 0,
+  });
 
-  if (data.trends.peTrend === "declining") score += 8;
-  else if (data.trends.peTrend === "stable") score += 3;
-  else if (data.trends.peTrend === "increasing") score -= 5;
+  let peTrendContrib = 0;
+  if (data.trends.peTrend === "declining") peTrendContrib = 8;
+  else if (data.trends.peTrend === "stable") peTrendContrib = 3;
+  else if (data.trends.peTrend === "increasing") peTrendContrib = -5;
+  score += peTrendContrib;
+  factors.push({
+    label: "P/E Trend",
+    value: data.trends.peTrend,
+    contribution: peTrendContrib,
+    maxContribution: 8,
+    detail: peTrendContrib > 0
+      ? `P/E is ${data.trends.peTrend} — becoming more attractive`
+      : peTrendContrib < 0
+        ? `P/E is ${data.trends.peTrend} — valuation expanding, watch for overvaluation`
+        : `P/E is stable — no significant valuation shift`,
+    positive: peTrendContrib >= 0,
+  });
 
-  if (data.currentDividendPayout > 70) score += 3;
-  else if (data.currentDividendPayout > 40) score += 2;
-  else if (data.currentDividendPayout < 20) score -= 2;
+  let divContrib = 0;
+  if (data.currentDividendPayout > 70) divContrib = 3;
+  else if (data.currentDividendPayout > 40) divContrib = 2;
+  else if (data.currentDividendPayout < 20) divContrib = -2;
+  score += divContrib;
+  factors.push({
+    label: "Dividend Payout",
+    value: `${data.currentDividendPayout.toFixed(0)}%`,
+    contribution: divContrib,
+    maxContribution: 3,
+    detail: divContrib > 0
+      ? `Payout of ${data.currentDividendPayout.toFixed(0)}% — ${divContrib >= 3 ? "high above 70%" : "moderate above 40%"}`
+      : divContrib < 0
+        ? `Payout of ${data.currentDividendPayout.toFixed(0)}% — low below 20%`
+        : `Payout of ${data.currentDividendPayout.toFixed(0)}% — neutral between 20-40%`,
+    positive: divContrib >= 0,
+  });
 
   const recentRevGrowth = data.revenueGrowth?.slice(-3).reduce((a, b) => a + b, 0) / 3 || 0;
-  if (recentRevGrowth > 15) score += 5;
-  else if (recentRevGrowth > 10) score += 3;
-  else if (recentRevGrowth < 3) score -= 3;
+  let revMomentumContrib = 0;
+  if (recentRevGrowth > 15) revMomentumContrib = 5;
+  else if (recentRevGrowth > 10) revMomentumContrib = 3;
+  else if (recentRevGrowth < 3) revMomentumContrib = -3;
+  score += revMomentumContrib;
+  factors.push({
+    label: "Revenue Momentum",
+    value: `${recentRevGrowth.toFixed(1)}%`,
+    contribution: revMomentumContrib,
+    maxContribution: 5,
+    detail: revMomentumContrib > 0
+      ? `Recent revenue avg ${recentRevGrowth.toFixed(1)}% — ${revMomentumContrib >= 5 ? "strong momentum above 15%" : "decent momentum above 10%"}`
+      : revMomentumContrib < 0
+        ? `Recent revenue avg ${recentRevGrowth.toFixed(1)}% — weak below 3%`
+        : `Recent revenue avg ${recentRevGrowth.toFixed(1)}% — neutral between 3-10%`,
+    positive: revMomentumContrib >= 0,
+  });
 
   const rawScore = Math.max(0, Math.min(100, score));
   const normalizedScore = Math.round(rawScore * 0.95);
+  let total: number;
+  if (normalizedScore >= 95) total = 95;
+  else if (normalizedScore >= 90) total = 90;
+  else if (normalizedScore >= 85) total = 85;
+  else total = normalizedScore;
 
-  if (normalizedScore >= 95) return 95;
-  if (normalizedScore >= 90) return 90;
-  if (normalizedScore >= 85) return 85;
+  const signal = getSignalLabel(total);
+  const positiveCount = factors.filter((f) => f.positive).length;
+  const topFactors = factors
+    .filter((f) => f.contribution > 0)
+    .slice(0, 3)
+    .map((f) => f.label);
+  const negFactors = factors
+    .filter((f) => f.contribution < 0)
+    .slice(0, 2)
+    .map((f) => f.label);
 
-  return normalizedScore;
+  let summary: string;
+  if (signal === "buy") {
+    summary = `Strong buy: ${topFactors.join(", ")} driving performance.`;
+    if (negFactors.length > 0) summary += ` Watch: ${negFactors.join(", ")}.`;
+  } else if (signal === "sell") {
+    summary = `Sell signal: ${negFactors.join(", ")} are concerns.`;
+    if (topFactors.length > 0) summary += ` Positives: ${topFactors.join(", ")}.`;
+  } else {
+    summary = `Mixed: ${positiveCount} of 6 factors positive.`;
+    if (topFactors.length > 0) summary += ` Upside from ${topFactors.join(", ")}.`;
+    if (negFactors.length > 0) summary += ` Concerns: ${negFactors.join(", ")}.`;
+  }
+
+  return { total, rawScore, signal, factors, summary };
+}
+
+export function getStockScore(data: StockData): number {
+  return getScoreBreakdown(data).total;
 }
 
 export function getSignalLabel(score: number): "buy" | "hold" | "sell" {
   if (score >= 70) return "buy";
   if (score >= 45) return "hold";
   return "sell";
-}
-
-export function getAIInsight(symbol: string): string {
-  const data = loadStockData(symbol);
-  if (!data) return "No analysis available";
-
-  const score = getStockScore(data);
-  const signal = getSignalLabel(score);
-
-  let insights = `📊 ${symbol} Analysis\n\n`;
-  insights += `🎯 Signal: ${signal.toUpperCase()} (Score: ${score}/100)\n\n`;
-  insights += `📈 Key Metrics:\n`;
-  insights += `• P/E Ratio: ${data.currentPE.toFixed(1)}x ${getPEComment(data.currentPE)}\n`;
-  insights += `• OPM: ${data.currentOPM.toFixed(1)}% ${getOPMComment(data.currentOPM)}\n`;
-  insights += `• Sales Growth: ${data.trends.salesGrowth.toFixed(1)}%\n`;
-  insights += `• Dividend: ${data.currentDividendPayout.toFixed(0)}%\n\n`;
-
-  insights += `📉 Trends:\n`;
-  insights += `• P/E Trend: ${data.trends.peTrend}\n`;
-  insights += `• Sales Growth: ${data.trends.salesGrowth > 10 ? "Strong" : data.trends.salesGrowth > 5 ? "Moderate" : "Slow"}\n\n`;
-
-  if (signal === "buy") {
-    insights += `💡 Strong fundamentals with ${data.trends.salesGrowth > 10 ? "high" : "steady"} growth and ${data.currentPE < 25 ? "reasonable" : "premium"} valuation.`;
-  } else if (signal === "sell") {
-    insights += `💡 High valuation or declining growth. Consider waiting for better entry.`;
-  } else {
-    insights += `💡 Mixed signals. Monitor for clearer trend before decision.`;
-  }
-
-  return insights;
 }
 
 function getPEComment(pe: number): string {

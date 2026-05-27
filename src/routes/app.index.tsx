@@ -361,6 +361,11 @@ function Dashboard() {
                     </div>
                     <div className="font-medium mt-1">{s.title}</div>
                     <div className="text-xs text-muted-foreground">{s.note}</div>
+                    {s.reasoning && (
+                      <div className="text-[11px] text-muted-foreground/70 mt-1 leading-relaxed line-clamp-2">
+                        {s.reasoning}
+                      </div>
+                    )}
                   </div>
                   <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition" />
                 </motion.div>

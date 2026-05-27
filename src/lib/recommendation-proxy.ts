@@ -31,6 +31,7 @@ export interface RecommendationSignal {
   tag: string;
   title: string;
   note: string;
+  reasoning: string;
   confidence: number;
 }
 
@@ -157,6 +158,8 @@ function getLocalRecommendations(input: RecommendationInput): RecommendationSign
     const config = STOCK_CONFIG[p.ticker];
     const name = config?.name || p.ticker;
     const owned = alreadyOwned.has(p.ticker);
+    const thesis = config?.thesis || "Strong fundamentals and market position.";
+    const sector = config?.sector || "";
 
     let action = p.tag;
     let note = p.note;
@@ -170,10 +173,15 @@ function getLocalRecommendations(input: RecommendationInput): RecommendationSign
       note = `You hold ${holding?.quantity || 0} shares. Current P&L: ${+plPct >= 0 ? "+" : ""}${plPct}%. ${p.note}`;
     }
 
+    const reasoning = owned
+      ? `${name} aligns with your ${risk} risk profile in the ${sector} sector. ${thesis}`
+      : `${name} is a ${sector} pick for your ${risk} profile. ${thesis}`;
+
     return {
       tag: action,
       title: owned ? `Hold ${name}` : `Add ${name}`,
       note,
+      reasoning,
       confidence: Math.max(70, 92 - i * 6),
     };
   });
@@ -247,10 +255,11 @@ Based on this profile, generate exactly 3 personalized investment signals. Each 
 - tag: one of "Strong buy", "Buy", "Hold", "Rebalance", "Watch", "Trim", or "Sell"
 - title: a short actionable title (max 50 chars)
 - note: a brief explanation (max 100 chars) with reasoning
+- reasoning: a data-backed explanation (max 150 chars) citing specific fundamentals or market factors
 - confidence: a number 0-100 indicating your conviction
 
 Return ONLY valid JSON with this structure, no markdown wrapping, no explanation:
-{"signals":[{"tag":"...","title":"...","note":"...","confidence":85}]}`;
+{"signals":[{"tag":"...","title":"...","note":"...","reasoning":"...","confidence":85}]}`;
 
     try {
       const response = await tryGenerateContent(
@@ -295,6 +304,7 @@ Return ONLY valid JSON with this structure, no markdown wrapping, no explanation
         tag: String(s.tag || "Watch"),
         title: String(s.title || "Review your portfolio"),
         note: String(s.note || ""),
+        reasoning: String(s.reasoning || s.note || ""),
         confidence: Math.min(100, Math.max(0, Number(s.confidence) || 50)),
       }));
 

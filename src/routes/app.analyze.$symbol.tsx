@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, BookOpen, Loader2, AlertTriangle, Newspaper } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { useStockQuote } from "@/hooks/useStocks";
-import { loadStockDataAsync, getStockScore, getSignalLabel, type StockData } from "@/lib/stockData";
+import { loadStockDataAsync, getStockScore, getScoreBreakdown, getSignalLabel, type StockData } from "@/lib/stockData";
+import { ScoreBreakdown as ScoreBreakdownPanel } from "@/components/app/score-breakdown";
 import { fetchNews, tickerToMarketAuxSymbol, type NewsArticle } from "@/lib/news";
 import { NewsCard, NewsCardSkeleton } from "@/components/app/news-card";
 
@@ -119,8 +120,9 @@ function StockAnalyze() {
     );
   }
 
-  const score = getStockScore(stockData);
-  const signal = getSignalLabel(score);
+  const breakdown = getScoreBreakdown(stockData);
+  const score = breakdown.total;
+  const signal = breakdown.signal;
 
   const price = quote?.c || stockData.currentPrice || 0;
   const change = quote?.dp || 0;
@@ -142,7 +144,7 @@ function StockAnalyze() {
 
       {/* Hero Price Section */}
       <div className="relative overflow-hidden rounded-3xl mx-6 mb-8 bg-gradient-card border border-border/60">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent pointer-events-none" />
         <div className="relative p-8 flex items-center justify-between">
           <div>
             <div className="text-5xl font-bold mb-2">₹{price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
@@ -204,11 +206,15 @@ function StockAnalyze() {
             }`}>
               {signal === "buy" ? "BUY" : signal === "hold" ? "HOLD" : "SELL"}
             </div>
-            <div className="text-sm text-muted-foreground">
-              Based on fundamental analysis & growth metrics
+            <div className="text-sm text-muted-foreground leading-relaxed">
+              {breakdown.summary}
             </div>
           </div>
         </motion.div>
+
+        <div className="px-8 pb-6">
+          <ScoreBreakdownPanel breakdown={breakdown} />
+        </div>
       </div>
 
       {/* Key Metrics Grid */}
