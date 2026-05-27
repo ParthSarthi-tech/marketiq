@@ -13,6 +13,7 @@ import {
   TrendingUp,
   ChevronRight,
   Eye,
+  Newspaper,
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { useAuth, hasCompletedOnboarding } from "@/hooks/useAuth";
@@ -26,6 +27,7 @@ const nav: { to: string; label: string; icon: any; exact?: boolean }[] = [
   { to: "/app/portfolio", label: "Portfolio", icon: PieChart },
   { to: "/app/discover", label: "Discover", icon: Compass },
   { to: "/app/watchlist", label: "Watchlist", icon: Eye },
+  { to: "/app/news", label: "News", icon: Newspaper },
   { to: "/app/advisor", label: "AI Advisor", icon: Sparkles },
   { to: "/app/learn", label: "Learn", icon: GraduationCap },
 ];

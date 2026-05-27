@@ -12,6 +12,7 @@ import {
   Loader2,
   BarChart3,
   Plus,
+  Newspaper,
 } from "lucide-react";
 import { PageHeader, StatCard, CountUp, Sparkline } from "@/components/app/widgets";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,6 +21,8 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { useIndianStocks, useNiftyQuote } from "@/hooks/useStocks";
 import { isMarketOpen } from "@/hooks/useStocks";
 import { getRecommendations, type RecommendationSignal } from "@/lib/recommendation-proxy";
+import { fetchNews, type NewsArticle } from "@/lib/news";
+import { NewsCard, NewsCardSkeleton, NewsEmptyState } from "@/components/app/news-card";
 
 export const Route = createFileRoute("/app/")({
   component: Dashboard,
@@ -74,6 +77,15 @@ function Dashboard() {
             : "";
 
   const marketOpen = isMarketOpen();
+
+  const { data: newsData, isLoading: newsLoading } = useQuery({
+    queryKey: ["dashboardNews"],
+    queryFn: () => fetchNews({ data: { limit: 3, filterEntities: true } }),
+    staleTime: 300_000,
+    retry: 1,
+  });
+
+  const trendingArticles = newsData?.articles || [];
 
   const { data: aiSignals, isLoading: signalsLoading } = useQuery({
     queryKey: ["recommendations", user?.id],
@@ -469,6 +481,44 @@ function Dashboard() {
             </motion.div>
           ))}
         </div>
+      </motion.div>
+
+      {/* Market Brief */}
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.45 }}
+        className="rounded-3xl p-6 bg-gradient-card border border-border/60 mt-6"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="font-semibold flex items-center gap-2">
+              <Newspaper className="w-4 h-4 text-primary" /> Market Brief
+            </div>
+            <div className="text-xs text-muted-foreground">Latest headlines</div>
+          </div>
+          <Link
+            to="/app/news"
+            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+          >
+            All news <ChevronRight className="w-3 h-3" />
+          </Link>
+        </div>
+        {newsLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <NewsCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : trendingArticles.length === 0 ? (
+          <NewsEmptyState />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {trendingArticles.map((article: NewsArticle, i: number) => (
+              <NewsCard key={article.uuid} article={article} index={i} />
+            ))}
+          </div>
+        )}
       </motion.div>
     </div>
   );

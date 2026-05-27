@@ -1,10 +1,12 @@
 import { createFileRoute, useParams } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, BookOpen, Loader2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, BookOpen, Loader2, AlertTriangle, Newspaper } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { useStockQuote } from "@/hooks/useStocks";
 import { loadStockDataAsync, getStockScore, getSignalLabel, type StockData } from "@/lib/stockData";
+import { fetchNews, tickerToMarketAuxSymbol, type NewsArticle } from "@/lib/news";
+import { NewsCard, NewsCardSkeleton } from "@/components/app/news-card";
 
 export const Route = createFileRoute("/app/analyze/$symbol")({
   component: StockAnalyze,
@@ -14,6 +16,22 @@ export const Route = createFileRoute("/app/analyze/$symbol")({
 function StockAnalyze() {
   const { symbol } = useParams({ from: "/app/analyze/$symbol" });
   const { data: quote } = useStockQuote(symbol);
+
+  const { data: newsData, isLoading: newsLoading } = useQuery({
+    queryKey: ["stockNews", symbol],
+    queryFn: () =>
+      fetchNews({
+        data: {
+          symbols: tickerToMarketAuxSymbol(symbol),
+          limit: 5,
+          filterEntities: true,
+        },
+      }),
+    staleTime: 300_000,
+    retry: 1,
+  });
+
+  const relatedArticles = newsData?.articles || [];
 
   const { data: stockData, isLoading: dataLoading } = useQuery({
     queryKey: ["stockData", symbol],
@@ -68,6 +86,33 @@ function StockAnalyze() {
               We are working on improving our dataset day by day. Please be patient — 
               {symbol} will be added soon with full fundamental analysis.
             </p>
+          </div>
+        </div>
+
+        {/* Related News */}
+        <div className="mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Newspaper className="w-5 h-5 text-primary" />
+              Related News
+            </h3>
+            {newsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <NewsCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : relatedArticles.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                No recent news for {symbol}.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {relatedArticles.map((article: NewsArticle, i: number) => (
+                  <NewsCard key={article.uuid} article={article} index={i} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -390,6 +435,33 @@ function StockAnalyze() {
             </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Related News */}
+      <div className="mx-6 mb-8">
+        <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <Newspaper className="w-5 h-5 text-primary" />
+            Related News
+          </h3>
+          {newsLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <NewsCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : relatedArticles.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              No recent news for {symbol}.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {relatedArticles.map((article: NewsArticle, i: number) => (
+                <NewsCard key={article.uuid} article={article} index={i} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
