@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -109,6 +110,21 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    const origLog = console.log;
+    const origDebug = console.debug;
+    const origInfo = console.info;
+    console.log = () => {};
+    console.debug = () => {};
+    console.info = () => {};
+    return () => {
+      console.log = origLog;
+      console.debug = origDebug;
+      console.info = origInfo;
+    };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
