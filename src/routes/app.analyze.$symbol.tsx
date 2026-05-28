@@ -394,8 +394,8 @@ function StockAnalyze() {
                     setBuyQueued(false);
                     if (marketOpen) {
                       await buy(symbol, stockData.companyName, buyQty, price);
-                    } else {
-                      addQueuedOrder(symbol, stockData.companyName, "buy", buyQty, price);
+                    } else if (user?.id) {
+                      addQueuedOrder(user.id, symbol, stockData.companyName, "buy", buyQty, price);
                       setBuyQueued(true);
                     }
                     setBuySuccess(true);

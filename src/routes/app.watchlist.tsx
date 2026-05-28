@@ -48,7 +48,7 @@ function Watchlist() {
       if (marketOpen) {
         await buy(addTarget.ticker, addTarget.name, addQty, addTarget.price);
       } else {
-        addQueuedOrder(addTarget.ticker, addTarget.name, "buy", addQty, addTarget.price);
+        addQueuedOrder(user.id, addTarget.ticker, addTarget.name, "buy", addQty, addTarget.price);
       }
       setAddSuccess(true);
       setTimeout(() => { setAddTarget(null); setAddSuccess(false); }, 1500);

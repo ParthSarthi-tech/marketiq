@@ -10,11 +10,13 @@ export interface QueuedOrder {
   status: "queued" | "executed" | "cancelled";
 }
 
-const STORAGE_KEY = "marketiq_orders";
+function storageKey(userId: string) {
+  return `marketiq_orders_${userId}`;
+}
 
-export function getQueuedOrders(): QueuedOrder[] {
+export function getQueuedOrders(userId: string): QueuedOrder[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -22,13 +24,14 @@ export function getQueuedOrders(): QueuedOrder[] {
 }
 
 export function addQueuedOrder(
+  userId: string,
   ticker: string,
   companyName: string,
   type: "buy" | "sell",
   quantity: number,
   price: number,
 ): QueuedOrder {
-  const orders = getQueuedOrders();
+  const orders = getQueuedOrders(userId);
   const order: QueuedOrder = {
     id: crypto.randomUUID(),
     ticker,
@@ -41,25 +44,26 @@ export function addQueuedOrder(
     status: "queued",
   };
   orders.unshift(order);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+  localStorage.setItem(storageKey(userId), JSON.stringify(orders));
   return order;
 }
 
-export function cancelQueuedOrder(id: string) {
-  const orders = getQueuedOrders();
+export function cancelQueuedOrder(userId: string, id: string) {
+  const orders = getQueuedOrders(userId);
   const idx = orders.findIndex((o) => o.id === id);
   if (idx !== -1) {
     orders[idx].status = "cancelled";
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+    localStorage.setItem(storageKey(userId), JSON.stringify(orders));
   }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function executeQueuedOrders(
+  userId: string,
   buy: (ticker: string, companyName: string, quantity: number, price: number) => Promise<any>,
   sell: (ticker: string, quantity: number, price: number) => Promise<any>,
 ): number {
-  const orders = getQueuedOrders();
+  const orders = getQueuedOrders(userId);
   const pending = orders.filter((o) => o.status === "queued");
   let executed = 0;
 
@@ -81,7 +85,7 @@ export function executeQueuedOrders(
   }
 
   if (executed > 0) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+    localStorage.setItem(storageKey(userId), JSON.stringify(orders));
   }
   return executed;
 }

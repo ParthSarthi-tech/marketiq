@@ -25,7 +25,7 @@ import { useAuth, hasCompletedOnboarding } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { STOCK_CONFIG, getAllTickers, getStockName } from "@/lib/stockMetadata";
 import { DisclosureFooter } from "@/components/DisclosureFooter";
-import { getQueuedOrders } from "@/lib/orderQueue";
+import { getQueuedOrders, type QueuedOrder } from "@/lib/orderQueue";
 import { toast } from "sonner";
 
 const nav: { to: string; label: string; icon: any; exact?: boolean }[] = [
@@ -40,8 +40,9 @@ const nav: { to: string; label: string; icon: any; exact?: boolean }[] = [
 ];
 
 function NotificationBell() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [orders, setOrders] = useState<ReturnType<typeof getQueuedOrders>>([]);
+  const [orders, setOrders] = useState<QueuedOrder[]>([]);
   const [time, setTime] = useState(() => new Date());
   const ref = useRef<HTMLDivElement>(null);
 
@@ -51,11 +52,14 @@ function NotificationBell() {
   }, []);
 
   useEffect(() => {
-    setOrders(getQueuedOrders());
-    const onStorage = () => setOrders(getQueuedOrders());
+    if (!user?.id) return;
+    setOrders(getQueuedOrders(user.id));
+    const onStorage = () => {
+      if (user?.id) setOrders(getQueuedOrders(user.id));
+    };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {

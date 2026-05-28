@@ -164,19 +164,20 @@ function Portfolio() {
   const [executedCount, setExecutedCount] = useState(0);
 
   useEffect(() => {
-    setOrders(getQueuedOrders());
-  }, []);
+    if (!user?.id) return;
+    setOrders(getQueuedOrders(user.id));
+  }, [user?.id]);
 
   useEffect(() => {
-    if (!marketStatus.open) return;
-    const pending = getQueuedOrders().filter((o) => o.status === "queued");
+    if (!marketStatus.open || !user?.id) return;
+    const pending = getQueuedOrders(user.id).filter((o) => o.status === "queued");
     if (pending.length === 0) return;
-    const count = executeQueuedOrders(buy, sell);
+    const count = executeQueuedOrders(user.id, buy, sell);
     if (count > 0) {
       setExecutedCount(count);
-      setOrders(getQueuedOrders());
+      setOrders(getQueuedOrders(user.id));
     }
-  }, [marketStatus.open]);
+  }, [marketStatus.open, user?.id]);
 
   useEffect(() => {
     if (executedCount === 0) return;
@@ -252,13 +253,14 @@ function Portfolio() {
         await buy(selectedStock.ticker, selectedStock.name, quantity, effectivePrice);
       } else {
         addQueuedOrder(
+          user.id,
           selectedStock.ticker,
           selectedStock.name,
           "buy",
           quantity,
           effectivePrice,
         );
-        setOrders(getQueuedOrders());
+        setOrders(getQueuedOrders(user.id));
       }
       setShowAddModal(false);
       setSelectedStock(null);
@@ -555,11 +557,11 @@ function Portfolio() {
                       })}
                     </div>
                   </div>
-                  {order.status === "queued" && (
+                  {order.status === "queued" && user?.id && (
                     <button
                       onClick={() => {
-                        cancelQueuedOrder(order.id);
-                        setOrders(getQueuedOrders());
+                        cancelQueuedOrder(user.id, order.id);
+                        setOrders(getQueuedOrders(user.id));
                       }}
                       className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg border border-border/40 hover:border-border"
                     >
@@ -1195,15 +1197,16 @@ function Portfolio() {
                               selectedHolding.currentPrice,
                             );
                           }
-                        } else {
+                        } else if (user?.id) {
                           addQueuedOrder(
+                            user.id,
                             selectedHolding.ticker,
                             selectedHolding.company_name || selectedHolding.ticker,
                             holdingAction,
                             holdingQuantity,
                             selectedHolding.currentPrice,
                           );
-                          setOrders(getQueuedOrders());
+                          setOrders(getQueuedOrders(user.id));
                         }
                         setSelectedHolding(null);
                       } catch (e) {

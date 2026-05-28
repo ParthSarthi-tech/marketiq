@@ -3,7 +3,6 @@ import { useState, type ReactNode } from "react";
 import { ArrowRight, Eye, EyeOff, Loader2, Mail, Lock, User, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
 import { useNavigate } from "@tanstack/react-router";
-import { useAuth, hasCompletedOnboarding } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 
 const signInSchema = z.object({
@@ -73,7 +72,6 @@ function strength(pw: string) {
 
 export function AuthForm({ mode, cta }: Props) {
   const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
   const fields: Field[] =
     mode === "up"
       ? [
@@ -90,6 +88,7 @@ export function AuthForm({ mode, cta }: Props) {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [resendTarget, setResendTarget] = useState<string | null>(null);
 
   const pwScore = strength(values.password ?? "");
   const pwLabel = ["Too weak", "Weak", "Decent", "Strong", "Excellent"][pwScore];
@@ -119,30 +118,55 @@ export function AuthForm({ mode, cta }: Props) {
 
     try {
       if (mode === "up") {
-        const { data } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
+          email: values.email,
+          password: values.password,
+          options: { emailRedirectTo: `${window.location.origin}/sign-in` },
+        });
+
+        if (error) throw error;
+
+        if (data?.session) {
+          // Email confirmation is disabled — session returned immediately
+          setDone(true);
+          setTimeout(() => navigate({ to: "/app/onboarding" }), 700);
+        } else if (data?.user?.identities?.length === 0) {
+          throw new Error("An account with this email already exists. Try signing in.");
+        } else {
+          // Email confirmation required but SMTP may not be configured
+          setSubmitError(
+            "Account created, but the confirmation email couldn't be sent. " +
+              "Tell your Supabase admin to configure SMTP in Authentication → Settings, " +
+              "or disable 'Confirm email' to skip verification for development.",
+          );
+          setLoading(false);
+          return;
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
           email: values.email,
           password: values.password,
         });
 
-        setDone(true);
-        setTimeout(() => {
-          if (data?.session) {
-            navigate({ to: "/app/onboarding" });
+        if (error) {
+          const msg = error.message?.toLowerCase() || "";
+          if (msg.includes("email not confirmed")) {
+            setSubmitError("Email not yet confirmed. Check your inbox or click below to resend.");
+            setResendTarget(values.email);
+          } else if (msg.includes("invalid login credentials")) {
+            setSubmitError(
+              "Invalid email or password. If you signed up before disabling email confirmation, " +
+                "that account is still unconfirmed. Try signing up again with a fresh account.",
+            );
           } else {
-            navigate({ to: "/sign-in", search: { confirmed: "false" } });
+            throw error;
           }
-        }, 700);
-      } else {
-        const user = await signIn(values.email, values.password);
+          setLoading(false);
+          return;
+        }
+
         setDone(true);
-        setTimeout(async () => {
-          if (user?.id) {
-            const onboarded = await hasCompletedOnboarding(user.id);
-            navigate({ to: onboarded ? "/app" : "/app/onboarding" });
-          } else {
-            navigate({ to: "/app" });
-          }
-        }, 700);
+        setTimeout(() => navigate({ to: "/app" }), 700);
       }
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : "Authentication failed");
@@ -265,6 +289,28 @@ export function AuthForm({ mode, cta }: Props) {
                 >
                   {submitError}
                 </motion.div>
+              )}
+              {resendTarget && (
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  onClick={async () => {
+                    const { error } = await supabase.auth.resend({
+                      type: "signup",
+                      email: resendTarget,
+                      options: { emailRedirectTo: `${window.location.origin}/sign-in` },
+                    });
+                    if (error) {
+                      setSubmitError(`Resend failed: ${error.message}`);
+                    } else {
+                      setSubmitError("Confirmation email resent — check your inbox.");
+                    }
+                  }}
+                  className="text-xs text-primary hover:underline mt-1"
+                >
+                  Resend confirmation email
+                </motion.button>
               )}
             </motion.div>
           );
