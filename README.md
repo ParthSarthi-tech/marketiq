@@ -1,83 +1,83 @@
 # MarketIQ — Your Smart Stock Guide
 
-**MarketIQ** is a modern web application for Indian stock market analysis, virtual portfolio management, and intelligent investment research. Built with TanStack Start, it delivers real-time market insights, fundamental data analysis, and AI-powered stock scoring.
+A modern web application for Indian stock market analysis, virtual portfolio management, and AI-powered investment research. Built with TanStack Start, Supabase, and the Gemini API.
 
-## Features
+> **Note:** This repository is shared for portfolio and recruitment demonstration purposes. Viewing the code is permitted; copying, deploying, or redistributing is not. See [LICENSE](./LICENSE).
 
-- **Smart Stock Screener** — Browse  Indian stocks with fundamental data, P/E ratios, OPM trends, and growth metrics
-- **AI-Powered Analysis** — Get buy/hold/sell signals with scores out of 100, powered by financial trend analysis
-- **Virtual Portfolio** — Build and track a paper portfolio with live pricing, sector allocation, and P&L tracking
-- **Real-Time Market Data** — Live quotes via Upstox API, 52-week highs/lows, and market status indicators
-- **3D Visualizations** — Interactive 3D market landscape with React Three Fiber
-- **Advanced Charts** — Performance tracking with lightweight charts and Recharts integration
-- **CSV Data Import** — Stock fundamentals loaded from structured CSV files for 17 major Indian companies
+---
 
-## Tech Stack
+## Overview
 
-- **Framework:** TanStack Start (React 19, SSR)
-- **Language:** TypeScript
-- **Build Tool:** Vite 7
-- **Styling:** Tailwind CSS 4 + Framer Motion
-- **Database:** Supabase (PostgreSQL)
-- **APIs:** Gemini AI, Upstox, Finnhub
-- **Charts:** Lightweight Charts, Recharts, React Three Fiber
-- **UI Components:** Radix UI, shadcn-style components
+MarketIQ helps first-time Indian investors learn stock market concepts through a fully interactive virtual trading environment. Users complete a risk-profiling quiz, receive AI-curated stock picks matched to their profile, build a virtual portfolio, and track performance with live market data.
 
-## Getting Started
+### Features
 
-```bash
-# Clone the repository
-git clone <repo-url>
-cd marketiq-your-smart-stock-guide
+- **Smart Stock Screener** — Browse Indian stocks with fundamental data, P/E ratios, OPM trends, and growth metrics
+- **AI-Powered Analysis** — Get buy/hold/sell signals with scores out of 100, driven by financial trend analysis and risk-profile matching
+- **Virtual Portfolio** — Build and track a paper portfolio with live pricing, sector allocation, P&L tracking, and reset capabilities
+- **AI Advisor Chat** — Conversational assistant that understands your portfolio, risk profile, and holdings to answer market questions
+- **Real-Time Market Data** — Live quotes via Upstox API, market status indicators, and 52-week high/low tracking
+- **Profile-Based Discovery** — Curated stock sets for each risk profile (conservative to aggressive)
+- **Transaction History** — Full buy/sell log with search, filter, and clear functionality
+- **Queue & Auto-Execute** — Orders placed outside market hours queue and auto-execute when trading opens
 
-# Install dependencies
-npm install
+### Tech Stack
 
-# Start development server
-npm run dev
+| Layer | Technology |
+|-------|-----------|
+| Framework | TanStack Start (React 19, SSR, file-based routing) |
+| Language | TypeScript |
+| Build | Vite |
+| Styling | Tailwind CSS 4 + Framer Motion |
+| Database | Supabase (PostgreSQL) |
+| AI | Google Gemini |
+| Charts | Lightweight Charts, Recharts |
+| 3D | React Three Fiber |
+| UI | Radix UI, shadcn-style components |
 
-# Build for production
-npm run build
-```
+---
 
-## Environment Variables
+## Screenshots
 
-Copy `.env.example` to `.env` and configure the following:
+*(Add screenshots here — dashboard, portfolio, discover, AI advisor chat, analyze page)*
 
-| Variable | Description |
-|---|---|
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key |
-| `GEMINI_API_KEY` | Google Gemini AI API key |
-| `FINNHUB_API_KEY` | Finnhub stock data API key |
-| `VITE_SUPABASE_*` | Client-side Supabase config |
-| `VITE_UPSTOX_ACCESS_TOKEN` | Upstox API token for live quotes |
+| | |
+|:---:|:---:|
+| Dashboard | Portfolio |
+| *[screenshot]* | *[screenshot]* |
+| Discover | Stock Analysis |
+| *[screenshot]* | *[screenshot]* |
+| AI Advisor | Transaction History |
+| *[screenshot]* | *[screenshot]* |
+
+---
 
 ## Project Structure
 
 ```
 ├── public/
-│   └── data/               # Stock CSV data files
+│   └── data/              # (local only) Stock CSV datasets
 ├── src/
-│   ├── components/         # Reusable UI components
-│   ├── hooks/              # Custom React hooks
-│   ├── lib/                # Utilities (stock data, DB, auth)
-│   ├── routes/             # TanStack Start route pages
-│   └── styles.css          # Global styles
-├── .env.example            # Environment template
+│   ├── components/        # Reusable UI components
+│   │   ├── app/           # App-specific components
+│   │   ├── auth/          # Auth form components
+│   │   ├── landing/       # Landing/marketing page components
+│   │   └── ui/            # shadcn-style primitives
+│   ├── hooks/             # Custom React hooks
+│   ├── lib/               # Utilities, DB, integrations
+│   ├── routes/            # TanStack Start route pages
+│   │   ├── app.*.tsx      # Authenticated app routes
+│   │   ├── *.tsx          # Landing/marketing routes
+│   │   └── __root.tsx     # Root layout
+│   └── styles.css         # Global styles
+├── supabase/
+│   └── migrations/        # (local only) DB schema
+├── .env.example           # Environment variable template
 └── package.json
 ```
 
-## Scripts
-
-| Command | Description |
-|---|---|
-| `npm run dev` | Start development server |
-| `npm run build` | Production build |
-| `npm run preview` | Preview production build |
-| `npm run lint` | ESLint check |
-| `npm run format` | Prettier formatting |
+---
 
 ## License
 
-MIT
+All Rights Reserved. See [LICENSE](./LICENSE) for details.

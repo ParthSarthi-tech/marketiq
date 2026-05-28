@@ -32,3 +32,11 @@ dist-ssr
 *.sw?
 .lovable/
 .env
+
+# Proprietary financial datasets
+public/data/*.csv
+
+# Core business logic
+src/lib/stockData.ts
+src/lib/fundamentals.ts
+src/lib/ai.ts
