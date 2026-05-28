@@ -53,12 +53,7 @@ function NotificationBell() {
 
   useEffect(() => {
     if (!user?.id) return;
-    setOrders(getQueuedOrders(user.id));
-    const onStorage = () => {
-      if (user?.id) setOrders(getQueuedOrders(user.id));
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    getQueuedOrders(user.id).then(setOrders);
   }, [user?.id]);
 
   useEffect(() => {

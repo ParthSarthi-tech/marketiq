@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 const signInSchema = z.object({
   email: z.string().trim().email({ message: "Enter a valid email" }).max(255),
-  password: z.string().min(6, { message: "Min 6 characters" }).max(128),
+  password: z.string().min(8, { message: "Min 8 characters" }).max(128),
 });
 
 const signUpSchema = z.object({
@@ -197,7 +197,30 @@ export function AuthForm({ mode, cta }: Props) {
               <label className="text-xs font-medium text-muted-foreground tracking-wide flex items-center justify-between">
                 <span>{f.label}</span>
                 {isPw && mode === "in" && (
-                  <button type="button" className="text-accent hover:underline text-xs">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const email = values.email;
+                      if (!email) {
+                        setSubmitError("Enter your email first to reset password.");
+                        return;
+                      }
+                      setLoading(true);
+                      try {
+                        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                          redirectTo: `${window.location.origin}/sign-in`,
+                        });
+                        if (error) throw error;
+                        setSubmitError("Password reset email sent — check your inbox.");
+                      } catch (err) {
+                        setSubmitError(err instanceof Error ? err.message : "Failed to send reset email");
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    disabled={loading}
+                    className="text-accent hover:underline text-xs disabled:opacity-50"
+                  >
                     Forgot?
                   </button>
                 )}

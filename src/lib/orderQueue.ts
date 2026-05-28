@@ -1,26 +1,15 @@
-export interface QueuedOrder {
-  id: string;
-  ticker: string;
-  companyName: string;
-  type: "buy" | "sell";
-  quantity: number;
-  price: number;
-  totalCost: number;
-  createdAt: string;
-  status: "queued" | "executed" | "cancelled";
-}
+import {
+  getQueuedOrders as dbGetQueuedOrders,
+  addQueuedOrder as dbAddQueuedOrder,
+  cancelQueuedOrder as dbCancelQueuedOrder,
+  executeQueuedOrders as dbExecuteQueuedOrders,
+} from "./db";
+import type { QueuedOrder as DbQueuedOrder } from "./db";
 
-function storageKey(userId: string) {
-  return `marketiq_orders_${userId}`;
-}
+export type QueuedOrder = DbQueuedOrder;
 
-export function getQueuedOrders(userId: string): QueuedOrder[] {
-  try {
-    const raw = localStorage.getItem(storageKey(userId));
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+export function getQueuedOrders(userId: string): Promise<DbQueuedOrder[]> {
+  return dbGetQueuedOrders(userId);
 }
 
 export function addQueuedOrder(
@@ -30,62 +19,18 @@ export function addQueuedOrder(
   type: "buy" | "sell",
   quantity: number,
   price: number,
-): QueuedOrder {
-  const orders = getQueuedOrders(userId);
-  const order: QueuedOrder = {
-    id: crypto.randomUUID(),
-    ticker,
-    companyName,
-    type,
-    quantity,
-    price,
-    totalCost: quantity * price,
-    createdAt: new Date().toISOString(),
-    status: "queued",
-  };
-  orders.unshift(order);
-  localStorage.setItem(storageKey(userId), JSON.stringify(orders));
-  return order;
+): Promise<DbQueuedOrder> {
+  return dbAddQueuedOrder(userId, ticker, companyName, type, quantity, price);
 }
 
-export function cancelQueuedOrder(userId: string, id: string) {
-  const orders = getQueuedOrders(userId);
-  const idx = orders.findIndex((o) => o.id === id);
-  if (idx !== -1) {
-    orders[idx].status = "cancelled";
-    localStorage.setItem(storageKey(userId), JSON.stringify(orders));
-  }
+export function cancelQueuedOrder(userId: string, id: string): Promise<void> {
+  return dbCancelQueuedOrder(userId, id);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function executeQueuedOrders(
   userId: string,
-  buy: (ticker: string, companyName: string, quantity: number, price: number) => Promise<any>,
-  sell: (ticker: string, quantity: number, price: number) => Promise<any>,
-): number {
-  const orders = getQueuedOrders(userId);
-  const pending = orders.filter((o) => o.status === "queued");
-  let executed = 0;
-
-  for (const order of pending) {
-    try {
-      if (order.type === "buy") {
-        buy(order.ticker, order.companyName, order.quantity, order.price);
-      } else {
-        sell(order.ticker, order.quantity, order.price);
-      }
-      const idx = orders.findIndex((o) => o.id === order.id);
-      if (idx !== -1) {
-        orders[idx].status = "executed";
-      }
-      executed++;
-    } catch {
-      // skip failed orders
-    }
-  }
-
-  if (executed > 0) {
-    localStorage.setItem(storageKey(userId), JSON.stringify(orders));
-  }
-  return executed;
+  buy: (ticker: string, companyName: string, quantity: number, price: number) => Promise<unknown>,
+  sell: (ticker: string, quantity: number, price: number) => Promise<unknown>,
+): Promise<number> {
+  return dbExecuteQueuedOrders(userId, buy, sell);
 }

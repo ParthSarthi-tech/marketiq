@@ -5,13 +5,14 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, TrendingUp, TrendingDown, Activity, Target, Award, BarChart3, ArrowUpRight, ArrowDownRight, BookOpen, Loader2, AlertTriangle, Newspaper, ChevronDown, Info, Zap, X, RefreshCw, Plus, Check, Minus } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { useStockQuote } from "@/hooks/useStocks";
-import { loadStockDataAsync, getStockScore, getScoreBreakdown, getSignalLabel, type StockData } from "@/lib/stockData";
+import { loadStockDataAsync, loadStockData, getStockScore, getScoreBreakdown, getSignalLabel, type StockData } from "@/lib/stockData";
 import { ScoreBreakdown as ScoreBreakdownPanel } from "@/components/app/score-breakdown";
 import { fetchNews, tickerToMarketAuxSymbol, type NewsArticle } from "@/lib/news";
 import { NewsCard, NewsCardSkeleton } from "@/components/app/news-card";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { addQueuedOrder } from "@/lib/orderQueue";
+import { isMarketOpenBool } from "@/lib/marketUtils";
 
 export const Route = createFileRoute("/app/analyze/$symbol")({
   component: StockAnalyze,
@@ -40,118 +41,33 @@ function StockAnalyze() {
 
   const { data: stockData, isLoading: dataLoading } = useQuery({
     queryKey: ["stockData", symbol],
-    queryFn: () => loadStockDataAsync(symbol),
+    queryFn: async () => {
+      const syncData = loadStockData(symbol);
+      if (syncData) return syncData;
+      return loadStockDataAsync(symbol);
+    },
     staleTime: 180_000,
     retry: 1,
   });
 
-  if (dataLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-muted-foreground">Loading {symbol} data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!stockData) {
-    const price = quote?.c || 0;
-    const change = quote?.dp || 0;
-    const up = change >= 0;
-    return (
-      <div className="min-h-screen pb-12">
-        <PageHeader
-          title={<>{symbol} <span className="text-muted-foreground text-xl font-normal">— NSE</span></>}
-          action={
-            <a href="/app/discover" className="inline-flex items-center gap-2 glass px-4 py-2.5 rounded-xl text-sm hover:bg-card/60 transition">
-              <ArrowLeft className="w-4 h-4" /> Back to Discover
-            </a>
-          }
-        />
-        <div className="mx-6 mb-8">
-          <div className="rounded-3xl p-8 bg-gradient-card border border-border/60">
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <div className="text-5xl font-bold mb-2">₹{price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
-                <div className={`flex items-center gap-2 text-lg ${up ? "text-[var(--bull)]" : "text-[var(--bear)]"}`}>
-                  {up ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
-                  {up ? "+" : ""}{change.toFixed(2)}% today
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="mx-6 mb-8">
-          <div className="rounded-3xl p-8 bg-gradient-card/50 border border-border/40 text-center">
-            <AlertTriangle className="w-10 h-10 mx-auto mb-4 text-muted-foreground" />
-            <h2 className="text-xl font-bold mb-2">Deep analysis not available</h2>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              We are working on improving our dataset day by day. Please be patient — 
-              {symbol} will be added soon with full fundamental analysis.
-            </p>
-          </div>
-        </div>
-
-        {/* Related News */}
-        <div className="mx-6 mb-8">
-          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60">
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <Newspaper className="w-5 h-5 text-primary" />
-              Related News
-            </h3>
-            {newsLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <NewsCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : newsError ? (
-              <div className="text-center py-8">
-                <AlertTriangle className="w-5 h-5 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground mb-3">Failed to load news.</p>
-                <button
-                  type="button"
-                  onClick={() => retryNews()}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-card/40 border border-border/40 hover:bg-card/60 transition"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Retry
-                </button>
-              </div>
-            ) : relatedArticles.length === 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                No recent news for {symbol}.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {relatedArticles.map((article: NewsArticle, i: number) => (
-                  <NewsCard key={article.uuid} article={article} index={i} />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const breakdown = getScoreBreakdown(stockData);
-  const score = breakdown.total;
-  const signal = breakdown.signal;
-  const peContrib = breakdown.factors.find(f => f.label === "P/E Ratio")?.contribution ?? 0;
-  const opmContrib = breakdown.factors.find(f => f.label === "Operating Margin")?.contribution ?? 0;
-
-  const price = quote?.c || stockData.currentPrice || 0;
+  const price = quote?.c || stockData?.currentPrice || 0;
   const change = quote?.dp || 0;
   const up = change >= 0;
+
+  const breakdown = stockData ? getScoreBreakdown(stockData) : null;
+  const score = breakdown?.total ?? 50;
+  const signal = breakdown?.signal ?? "hold";
+  const peContrib = breakdown?.factors.find(f => f.label === "P/E Ratio")?.contribution ?? 0;
+  const opmContrib = breakdown?.factors.find(f => f.label === "Operating Margin")?.contribution ?? 0;
+  const companyName = stockData?.companyName || symbol;
+
   const [openMetrics, setOpenMetrics] = useState<Set<string>>(new Set(['pe']));
   const [growthChartMode, setGrowthChartMode] = useState<'line' | 'bar'>('line');
   const [proMode, setProMode] = useState(() => typeof window !== 'undefined' && localStorage.getItem('proMode') === 'true');
   const [proDisclaimerDismissed, setProDisclaimerDismissed] = useState(false);
   const [activeInfo, setActiveInfo] = useState<string | null>(null);
-  const [buyQty, setBuyQty] = useState(1);
+  const [buyQtyInput, setBuyQtyInput] = useState("1");
+  const buyQty = Math.max(1, parseInt(buyQtyInput) || 1);
   const [buySuccess, setBuySuccess] = useState(false);
   const [buyQueued, setBuyQueued] = useState(false);
   const [showBuyConfirm, setShowBuyConfirm] = useState(false);
@@ -159,17 +75,12 @@ function StockAnalyze() {
   const { user } = useAuth();
   const { buy, isBuying, cashBalance } = usePortfolio(user?.id ?? null);
 
-  const marketOpen = (() => {
-    const now = new Date();
-    const day = now.getDay();
-    const mins = now.getHours() * 60 + now.getMinutes();
-    return day > 0 && day < 6 && mins >= 555 && mins < 930;
-  })();
+  const marketOpen = isMarketOpenBool();
 
   const toggleProMode = () => {
     setProMode(v => {
       const next = !v;
-      localStorage.setItem('proMode', String(next));
+      if (typeof window !== 'undefined') localStorage.setItem('proMode', String(next));
       return next;
     });
     setProDisclaimerDismissed(false);
@@ -184,25 +95,27 @@ function StockAnalyze() {
     });
   };
 
-  const has52w = stockData.week52High > 0;
+  const has52w = stockData ? stockData.week52High > 0 : false;
 
   return (
     <div className="min-h-screen pb-12">
       <PageHeader
-        eyebrow={stockData.sector}
-        title={<>{stockData.symbol} <span className="text-gradient">{stockData.companyName}</span></>}
-        subtitle={`Market Cap: ${stockData.marketCap} | NSE: ${stockData.symbol}`}
+        eyebrow={stockData?.sector || "NSE"}
+        title={<>{symbol} <span className="text-gradient">{companyName}</span></>}
+        subtitle={stockData ? `Market Cap: ${stockData.marketCap} | NSE: ${stockData.symbol}` : `NSE: ${symbol}`}
         action={
           <div className="flex items-center gap-2">
-            <button
-              onClick={toggleProMode}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition ${
-                proMode ? 'bg-primary text-white' : 'glass text-muted-foreground hover:bg-card/60'
-              }`}
-            >
-              <Zap className="w-3.5 h-3.5" />
-              Pro
-            </button>
+            {stockData && (
+              <button
+                onClick={toggleProMode}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition ${
+                  proMode ? 'bg-primary text-white' : 'glass text-muted-foreground hover:bg-card/60'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Pro
+              </button>
+            )}
             <a href="/app/discover" className="inline-flex items-center gap-2 glass px-4 py-2.5 rounded-xl text-sm hover:bg-card/60 transition">
               <ArrowLeft className="w-4 h-4" /> Back to Discover
             </a>
@@ -211,7 +124,7 @@ function StockAnalyze() {
       />
 
       {/* Pro Mode Disclaimer */}
-      {proMode && !proDisclaimerDismissed && (
+      {stockData && proMode && !proDisclaimerDismissed && (
         <div className="mx-6 mb-6">
           <div className="bg-primary/10 border border-primary/20 rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
             <Zap className="w-4 h-4 text-primary shrink-0" />
@@ -235,69 +148,75 @@ function StockAnalyze() {
               {up ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
               {up ? "+" : ""}{change.toFixed(2)}% today
             </div>
-            {has52w && <div className="text-sm text-muted-foreground mt-2">
+            {has52w && stockData && <div className="text-sm text-muted-foreground mt-2">
               52W High: ₹{stockData.week52High.toLocaleString("en-IN")} | 52W Low: ₹{stockData.week52Low.toLocaleString("en-IN")}
             </div>}
           </div>
           
           {/* AI Score Circle */}
-          <div className="relative w-40 h-40">
-            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-              <circle cx="50" cy="50" r="45" fill="none" stroke="oklch(1 0 0 / 0.1)" strokeWidth="8" />
-              <motion.circle
-                cx="50" cy="50" r="45" fill="none"
-                stroke={score >= 70 ? "var(--bull)" : score >= 45 ? "var(--gold)" : "var(--bear)"}
-                strokeWidth="8"
-                strokeDasharray={`${(score / 100) * 283} 283`}
-                initial={{ strokeDasharray: "0 283" }}
-                animate={{ strokeDasharray: `${(score / 100) * 283} 283` }}
-                transition={{ duration: 1.5, ease: "easeOut" }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl font-bold">{score}</span>
-              <span className="text-xs text-muted-foreground">AI Score</span>
+          {stockData && (
+            <div className="relative w-40 h-40">
+              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="oklch(1 0 0 / 0.1)" strokeWidth="8" />
+                <motion.circle
+                  cx="50" cy="50" r="45" fill="none"
+                  stroke={score >= 70 ? "var(--bull)" : score >= 45 ? "var(--gold)" : "var(--bear)"}
+                  strokeWidth="8"
+                  strokeDasharray={`${(score / 100) * 283} 283`}
+                  initial={{ strokeDasharray: "0 283" }}
+                  animate={{ strokeDasharray: `${(score / 100) * 283} 283` }}
+                  transition={{ duration: 1.5, ease: "easeOut" }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-3xl font-bold">{score}</span>
+                <span className="text-xs text-muted-foreground">AI Score</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
         
-        {/* Signal Banner */}
-        <motion.div 
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className={`mx-8 mb-6 p-4 rounded-xl flex items-center gap-4 ${
-            signal === "buy" ? "bg-[var(--bull)]/10 border border-[var(--bull)]/30" :
-            signal === "hold" ? "bg-[var(--gold)]/10 border border-[var(--gold)]/30" :
-            "bg-[var(--bear)]/10 border border-[var(--bear)]/30"
-          }`}
-        >
-          <div className={`p-3 rounded-xl ${
-            signal === "buy" ? "bg-[var(--bull)]/20" :
-            signal === "hold" ? "bg-[var(--gold)]/20" :
-            "bg-[var(--bear)]/20"
-          }`}>
-            {signal === "buy" ? <Target className="w-6 h-6 text-[var(--bull)]" /> :
-             signal === "hold" ? <Activity className="w-6 h-6 text-[var(--gold)]" /> :
-             <TrendingDown className="w-6 h-6 text-[var(--bear)]" />}
-          </div>
-          <div>
-            <div className={`text-xl font-bold ${
-              signal === "buy" ? "text-[var(--bull)]" :
-              signal === "hold" ? "text-[var(--gold)]" :
-              "text-[var(--bear)]"
-            }`}>
-              {signal === "buy" ? "BUY" : signal === "hold" ? "HOLD" : "SELL"}
-            </div>
-            <div className="text-sm text-muted-foreground leading-relaxed">
-              {breakdown.summary}
-            </div>
-          </div>
-        </motion.div>
+        {/* Signal Banner & Score Breakdown */}
+        {stockData && breakdown && (
+          <>
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className={`mx-8 mb-6 p-4 rounded-xl flex items-center gap-4 ${
+                signal === "buy" ? "bg-[var(--bull)]/10 border border-[var(--bull)]/30" :
+                signal === "hold" ? "bg-[var(--gold)]/10 border border-[var(--gold)]/30" :
+                "bg-[var(--bear)]/10 border border-[var(--bear)]/30"
+              }`}
+            >
+              <div className={`p-3 rounded-xl ${
+                signal === "buy" ? "bg-[var(--bull)]/20" :
+                signal === "hold" ? "bg-[var(--gold)]/20" :
+                "bg-[var(--bear)]/20"
+              }`}>
+                {signal === "buy" ? <Target className="w-6 h-6 text-[var(--bull)]" /> :
+                 signal === "hold" ? <Activity className="w-6 h-6 text-[var(--gold)]" /> :
+                 <TrendingDown className="w-6 h-6 text-[var(--bear)]" />}
+              </div>
+              <div>
+                <div className={`text-xl font-bold ${
+                  signal === "buy" ? "text-[var(--bull)]" :
+                  signal === "hold" ? "text-[var(--gold)]" :
+                  "text-[var(--bear)]"
+                }`}>
+                  {signal === "buy" ? "BUY" : signal === "hold" ? "HOLD" : "SELL"}
+                </div>
+                <div className="text-sm text-muted-foreground leading-relaxed">
+                  {breakdown.summary}
+                </div>
+              </div>
+            </motion.div>
 
-        <div className="px-8 pb-6">
-          <ScoreBreakdownPanel key={String(proMode)} breakdown={breakdown} defaultExpanded={proMode} />
-        </div>
+            <div className="px-8 pb-6">
+              <ScoreBreakdownPanel key={String(proMode)} breakdown={breakdown} defaultExpanded={proMode} />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Add to Portfolio */}
@@ -322,21 +241,21 @@ function StockAnalyze() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setBuyQty(q => Math.max(1, q - 1))}
+                  onClick={() => setBuyQtyInput(v => String(Math.max(1, (parseInt(v) || 0) - 1)))}
                   className="w-8 h-8 rounded-lg bg-card/40 border border-border/40 flex items-center justify-center hover:bg-card/60 transition text-sm"
                 >
                   <Minus className="w-3 h-3" />
                 </button>
                 <input
-                  type="number"
-                  min={1}
-                  value={buyQty}
-                  onChange={e => setBuyQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-16 text-center bg-card/40 border border-border/60 rounded-lg py-1.5 text-sm font-mono tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  type="text"
+                  inputMode="numeric"
+                  value={buyQtyInput}
+                  onChange={e => { const v = e.target.value; if (v === "" || /^\d+$/.test(v)) setBuyQtyInput(v); }}
+                  className="w-16 text-center bg-card/40 border border-border/60 rounded-lg py-1.5 text-sm font-mono tabular-nums"
                 />
                 <button
                   type="button"
-                  onClick={() => setBuyQty(q => q + 1)}
+                  onClick={() => setBuyQtyInput(v => String(Math.max(1, (parseInt(v) || 0) + 1)))}
                   className="w-8 h-8 rounded-lg bg-card/40 border border-border/40 flex items-center justify-center hover:bg-card/60 transition text-sm"
                 >
                   <Plus className="w-3 h-3" />
@@ -348,6 +267,14 @@ function StockAnalyze() {
                   ₹{(buyQty * price).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                 </span>
               </span>
+              {price > 0 && (
+                <span className="text-xs text-muted-foreground w-full">
+                  Remaining: ₹{Math.max(0, cashBalance - buyQty * price).toLocaleString("en-IN", { maximumFractionDigits: 0 })}{" "}
+                  <span className={buyQty * price > cashBalance ? "text-[var(--bear)]" : "text-[var(--bull)]"}>
+                    ({buyQty * price > cashBalance ? "exceeds" : "available"})
+                  </span>
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setShowBuyConfirm(true)}
@@ -393,9 +320,9 @@ function StockAnalyze() {
                     setBuySuccess(false);
                     setBuyQueued(false);
                     if (marketOpen) {
-                      await buy(symbol, stockData.companyName, buyQty, price);
+                      await buy(symbol, companyName, buyQty, price);
                     } else if (user?.id) {
-                      addQueuedOrder(user.id, symbol, stockData.companyName, "buy", buyQty, price);
+                      await addQueuedOrder(user.id, symbol, companyName, "buy", buyQty, price);
                       setBuyQueued(true);
                     }
                     setBuySuccess(true);
@@ -412,6 +339,20 @@ function StockAnalyze() {
         </div>
       )}
 
+      {!stockData && !dataLoading && (
+        <div className="mx-6 mb-8">
+          <div className="rounded-3xl p-6 bg-gradient-card border border-border/60 text-center">
+            <AlertTriangle className="w-6 h-6 mx-auto mb-3 text-muted-foreground" />
+            <h3 className="font-semibold mb-1">Fundamental analysis unavailable</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {symbol} is not in our fundamental dataset yet. You can still view the live price and add it to your portfolio above.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {stockData && (
+      <>
       {/* Fundamentals at a Glance */}
       <div className="mx-6 mb-8">
         <div className="rounded-3xl bg-gradient-card/50 border border-border/30 px-6 py-3 overflow-x-auto">
@@ -636,6 +577,7 @@ function StockAnalyze() {
               value={`${calculateMarginOfSafety(stockData, price).toFixed(1)}%`}
               tooltip="How much below intrinsic value the stock trades"
               highlight={calculateMarginOfSafety(stockData, price) > 20}
+              negative={calculateMarginOfSafety(stockData, price) < 0}
             />
             <ValueMetric 
               label="PEG Ratio"
@@ -791,6 +733,8 @@ function StockAnalyze() {
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* Related News */}
       <div className="mx-6 mb-8">
@@ -1020,15 +964,15 @@ function InsightCard({ title, description, positive }: { title: string; descript
   );
 }
 
-function ValueMetric({ label, value, tooltip, highlight }: { label: string; value: string; tooltip: string; highlight?: boolean }) {
+function ValueMetric({ label, value, tooltip, highlight, negative }: { label: string; value: string; tooltip: string; highlight?: boolean; negative?: boolean }) {
   return (
     <motion.div 
       whileHover={{ scale: 1.02 }}
-      className={`p-4 rounded-xl border ${highlight ? "bg-[var(--bull)]/10 border-[var(--bull)]/30" : "bg-card/50 border-border/40"}`}
+      className={`p-4 rounded-xl border ${highlight ? "bg-[var(--bull)]/10 border-[var(--bull)]/30" : negative ? "bg-[var(--bear)]/10 border-[var(--bear)]/30" : "bg-card/50 border-border/40"}`}
       title={tooltip}
     >
       <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div className={`text-xl font-bold ${highlight ? "text-[var(--bull)]" : ""}`}>{value}</div>
+      <div className={`text-xl font-bold ${highlight ? "text-[var(--bull)]" : negative ? "text-[var(--bear)]" : ""}`}>{value}</div>
     </motion.div>
   );
 }
@@ -1067,7 +1011,7 @@ function calculateMarginOfSafety(data: StockData, priceOverride?: number): numbe
   const currentPrice = priceOverride || data.currentPrice || 0;
   if (currentPrice <= 0) return 0;
   const margin = ((fairValue - currentPrice) / fairValue) * 100;
-  return Math.max(0, margin);
+  return Math.round(margin * 10) / 10;
 }
 
 function calculatePEG(data: StockData): number {

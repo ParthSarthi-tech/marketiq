@@ -62,30 +62,28 @@ export async function resolveAllInstrumentKeys(): Promise<Record<string, string>
   if (initialized) return RESOLVED_KEYS;
 
   const tickers = Object.keys(STOCK_CONFIG);
-  const results: Record<string, string> = {};
 
-  for (const ticker of tickers) {
-    try {
-      const key = await resolveTickerToInstrumentKey(ticker);
-      if (key) {
-        results[ticker] = key;
-      } else {
-        const fallbackKey = await resolveAnyKey(ticker);
-        if (fallbackKey) {
-          results[ticker] = fallbackKey;
-        } else {
+  await Promise.allSettled(
+    tickers.map(async (ticker) => {
+      try {
+        let key = await resolveTickerToInstrumentKey(ticker);
+        if (!key) {
+          key = await resolveAnyKey(ticker);
+        }
+        if (key) {
+          RESOLVED_KEYS[ticker] = key;
+        } else if (!key) {
           console.warn(`[InstrumentResolver] Could not resolve: ${ticker}`);
         }
+      } catch (e) {
+        console.error(`[InstrumentResolver] Error resolving ${ticker}:`, e);
       }
-      await new Promise((r) => setTimeout(r, 200));
-    } catch (e) {
-      console.error(`[InstrumentResolver] Error resolving ${ticker}:`, e);
-    }
-  }
+    }),
+  );
 
   initialized = true;
 
-  return results;
+  return { ...RESOLVED_KEYS };
 }
 
 export function getResolvedKey(ticker: string): string | null {

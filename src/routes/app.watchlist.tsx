@@ -7,14 +7,8 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useWatchlist, useRemoveFromWatchlist } from "@/hooks/useWatchlist";
 import { useMultipleQuotes } from "@/hooks/useStocks";
 import { addQueuedOrder } from "@/lib/orderQueue";
+import { isMarketOpenBool } from "@/lib/marketUtils";
 import { useState } from "react";
-
-function isMarketNowOpen(): boolean {
-  const now = new Date();
-  const day = now.getDay();
-  const mins = now.getHours() * 60 + now.getMinutes();
-  return day > 0 && day < 6 && mins >= 555 && mins < 930;
-}
 
 export const Route = createFileRoute("/app/watchlist")({
   component: Watchlist,
@@ -34,7 +28,7 @@ function Watchlist() {
   const tickers = watchlist.map(w => w.ticker);
   const { data: quotes, isLoading: quotesLoading } = useMultipleQuotes(tickers);
 
-  const marketOpen = isMarketNowOpen();
+  const marketOpen = isMarketOpenBool();
 
   const handleRemove = (ticker: string) => {
     if (!user) return;
@@ -48,7 +42,7 @@ function Watchlist() {
       if (marketOpen) {
         await buy(addTarget.ticker, addTarget.name, addQty, addTarget.price);
       } else {
-        addQueuedOrder(user.id, addTarget.ticker, addTarget.name, "buy", addQty, addTarget.price);
+        await addQueuedOrder(user.id, addTarget.ticker, addTarget.name, "buy", addQty, addTarget.price);
       }
       setAddSuccess(true);
       setTimeout(() => { setAddTarget(null); setAddSuccess(false); }, 1500);

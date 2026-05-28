@@ -120,6 +120,9 @@ export function usePortfolio(userId: string | null) {
     queryKey: ["cashBalance", userId],
     queryFn: () => (userId ? getUserCashBalance(userId) : Promise.resolve(250000)),
     enabled: !!userId,
+    staleTime: 30000,
+    refetchInterval: 30000,
+    refetchIntervalInBackground: true,
   });
 
   const mergedQuotes = { ...quotes, ...liveQuotes };
@@ -186,6 +189,15 @@ export function usePortfolio(userId: string | null) {
       await updateUserCashBalance(userId, currentCash - totalCost);
       return result;
     },
+    onMutate: async ({ userId, currentCash, quantity, price }) => {
+      await queryClient.cancelQueries({ queryKey: ["cashBalance", userId] });
+      const prev = queryClient.getQueryData(["cashBalance", userId]);
+      queryClient.setQueryData(["cashBalance", userId], currentCash - quantity * price);
+      return { prev };
+    },
+    onError: (_err, { userId }, ctx) => {
+      if (ctx?.prev !== undefined) queryClient.setQueryData(["cashBalance", userId], ctx.prev);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio", userId] });
       queryClient.invalidateQueries({ queryKey: ["cashBalance", userId] });
@@ -221,6 +233,15 @@ export function usePortfolio(userId: string | null) {
 
       await removeFromPortfolio(userId, ticker, quantity);
       await updateUserCashBalance(userId, currentCash + quantity * price);
+    },
+    onMutate: async ({ userId, currentCash, quantity, price }) => {
+      await queryClient.cancelQueries({ queryKey: ["cashBalance", userId] });
+      const prev = queryClient.getQueryData(["cashBalance", userId]);
+      queryClient.setQueryData(["cashBalance", userId], currentCash + quantity * price);
+      return { prev };
+    },
+    onError: (_err, { userId }, ctx) => {
+      if (ctx?.prev !== undefined) queryClient.setQueryData(["cashBalance", userId], ctx.prev);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["portfolio", userId] });

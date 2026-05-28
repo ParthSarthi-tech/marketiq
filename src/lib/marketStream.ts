@@ -1,7 +1,5 @@
 import { isMarketOpen, getWebSocketAuthUrl } from "./upstox";
 
-const UPSTOX_TOKEN = import.meta.env.VITE_UPSTOX_ACCESS_TOKEN;
-
 export interface TickData {
   symbol: string;
   instrumentKey: string;

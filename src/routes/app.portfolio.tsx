@@ -15,15 +15,18 @@ import {
   ExternalLink,
   Clock,
   Pencil,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader, StatCard, CountUp, Sparkline } from "@/components/app/widgets";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { STOCK_CONFIG, getStockSector } from "@/lib/stockMetadata";
-import { getQuotesBatch } from "@/lib/upstox";
-import { getResolvedKey } from "@/lib/instrumentResolver";
-import { useState, useMemo, useEffect } from "react";
+import { getQuotesBatch, searchInstruments, type InstrumentSearchResult } from "@/lib/upstox";
+import { resolveAnyKey } from "@/lib/instrumentResolver";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   getQueuedOrders,
   addQueuedOrder,
@@ -31,6 +34,9 @@ import {
   executeQueuedOrders,
   type QueuedOrder,
 } from "@/lib/orderQueue";
+import { resetPortfolio } from "@/lib/db";
+import { isMarketOpen as checkMarketOpen } from "@/lib/marketUtils";
+import { toast } from "sonner";
 
 function getDeterministicSparkline(symbol: string): number[] {
   const hash = symbol.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
@@ -62,27 +68,6 @@ function generateEquityCurve(total: number): { date: string; value: number; nift
     });
   }
   return data;
-}
-
-function isMarketOpen(): { open: boolean; message: string } {
-  const now = new Date();
-  const day = now.getDay();
-  const hours = now.getHours();
-  const minutes = now.getMinutes();
-  const currentTime = hours * 60 + minutes;
-  const marketOpen = 9 * 60 + 15;
-  const marketClose = 15 * 60 + 30;
-
-  if (day === 0 || day === 6) {
-    return { open: false, message: "Markets closed (Weekend)" };
-  }
-  if (currentTime < marketOpen) {
-    return { open: false, message: "Markets open at 9:15 AM" };
-  }
-  if (currentTime >= marketClose) {
-    return { open: false, message: "Markets closed for the day" };
-  }
-  return { open: true, message: "Markets open" };
 }
 
 const TIME_RANGES = ["1W", "1M", "3M", "1Y", "ALL"] as const;
@@ -140,7 +125,7 @@ function Portfolio() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedStock, setSelectedStock] = useState<{ ticker: string; name: string } | null>(null);
-  const [quantity, setQuantity] = useState(10);
+  const [quantityInput, setQuantityInput] = useState("10");
   const [customPrice, setCustomPrice] = useState<number | "">("");
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [currentPrice, setCurrentPrice] = useState(0);
@@ -157,26 +142,33 @@ function Portfolio() {
   const [editAvgPrice, setEditAvgPrice] = useState<number | "">("");
   const [editQuantity, setEditQuantity] = useState<number | "">("");
   const [editing, setEditing] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState<TimeRange>("3M");
   const [targetPcts, setTargetPcts] = useState<Record<string, number>>({});
-  const marketStatus = isMarketOpen();
+  const marketStatus = checkMarketOpen();
   const [orders, setOrders] = useState<QueuedOrder[]>([]);
   const [executedCount, setExecutedCount] = useState(0);
 
   useEffect(() => {
     if (!user?.id) return;
-    setOrders(getQueuedOrders(user.id));
+    getQueuedOrders(user.id).then(setOrders);
   }, [user?.id]);
 
   useEffect(() => {
     if (!marketStatus.open || !user?.id) return;
-    const pending = getQueuedOrders(user.id).filter((o) => o.status === "queued");
-    if (pending.length === 0) return;
-    const count = executeQueuedOrders(user.id, buy, sell);
-    if (count > 0) {
-      setExecutedCount(count);
-      setOrders(getQueuedOrders(user.id));
-    }
+    (async () => {
+      const orders = await getQueuedOrders(user.id);
+      const pending = orders.filter((o) => o.status === "queued");
+      if (pending.length === 0) return;
+      const count = await executeQueuedOrders(user.id, buy, sell);
+      if (count > 0) {
+        setExecutedCount(count);
+        const updated = await getQueuedOrders(user.id);
+        setOrders(updated);
+      }
+    })();
   }, [marketStatus.open, user?.id]);
 
   useEffect(() => {
@@ -214,57 +206,94 @@ function Portfolio() {
     URL.revokeObjectURL(url);
   };
 
-  const sectors = Object.keys(sectorAllocation);
+  const handleResetPortfolio = async () => {
+    if (!user?.id) return;
+    setResetting(true);
+    try {
+      await resetPortfolio(user.id);
+      queryClient.invalidateQueries({ queryKey: ["portfolio", user.id] });
+      queryClient.invalidateQueries({ queryKey: ["cashBalance", user.id] });
+      toast.success("Portfolio reset", { description: "Reset to ₹2,50,000 virtual cash." });
+      setShowResetModal(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Reset failed", { description: "Could not reset portfolio." });
+    } finally {
+      setResetting(false);
+    }
+  };
 
-  const filteredStocks = Object.values(STOCK_CONFIG).filter(
-    (s) =>
-      s.ticker.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const [searchResults, setSearchResults] = useState<InstrumentSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (!searchQuery || searchQuery.length < 1) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+    setSearchLoading(true);
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await searchInstruments(searchQuery, "NSE");
+        setSearchResults(results.filter(r => r.segment === "NSE_EQ"));
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+  }, [searchQuery]);
+
+  const sectors = Object.keys(sectorAllocation);
 
   const handleStockSelect = (stock: { ticker: string; name: string }) => {
     setSelectedStock(stock);
     setSearchQuery(stock.name);
     setShowStockDropdown(false);
     setLoadingPrice(true);
-    const key = getResolvedKey(stock.ticker);
-    if (key) {
-      getQuotesBatch([key])
-        .then((q) => {
-          const quote = q[key];
-          setCurrentPrice(quote?.lastPrice || 0);
-          setLoadingPrice(false);
-        })
-        .catch(() => setLoadingPrice(false));
-    } else {
-      setCurrentPrice(0);
-      setLoadingPrice(false);
-    }
+    resolveAnyKey(stock.ticker)
+      .then((key) => {
+        if (key) {
+          return getQuotesBatch([key]).then((q) => {
+            const quote = q[key];
+            setCurrentPrice(quote?.lastPrice || 0);
+          });
+        }
+        setCurrentPrice(0);
+      })
+      .catch(() => setCurrentPrice(0))
+      .finally(() => setLoadingPrice(false));
   };
 
+  const buyQty = Math.max(1, parseInt(quantityInput) || 1);
   const effectivePrice = customPrice === "" ? currentPrice : customPrice;
-  const totalCost = quantity * effectivePrice;
+  const totalCost = buyQty * effectivePrice;
 
   const handleBuy = async () => {
     if (!user?.id || !selectedStock || effectivePrice <= 0 || totalCost > cashBalance) return;
     setBuying(true);
     try {
       if (marketStatus.open) {
-        await buy(selectedStock.ticker, selectedStock.name, quantity, effectivePrice);
+        await buy(selectedStock.ticker, selectedStock.name, buyQty, effectivePrice);
       } else {
-        addQueuedOrder(
+        await addQueuedOrder(
           user.id,
           selectedStock.ticker,
           selectedStock.name,
           "buy",
-          quantity,
+          buyQty,
           effectivePrice,
         );
-        setOrders(getQueuedOrders(user.id));
+        const updated = await getQueuedOrders(user.id);
+        setOrders(updated);
       }
       setShowAddModal(false);
       setSelectedStock(null);
-      setQuantity(10);
+      setQuantityInput("10");
       setCustomPrice("");
       setSearchQuery("");
     } catch (e) {
@@ -338,6 +367,12 @@ function Portfolio() {
               className="inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition"
             >
               <Download className="w-4 h-4" /> Export
+            </button>
+            <button
+              onClick={() => setShowResetModal(true)}
+              className="inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition text-[var(--bear)]"
+            >
+              <RefreshCw className="w-4 h-4" /> Reset
             </button>
             <button
               onClick={() => setShowAddModal(true)}
@@ -546,10 +581,10 @@ function Portfolio() {
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {order.quantity} × ₹{order.price.toLocaleString("en-IN")}
                       <span className="mx-1">·</span>
-                      ₹{order.totalCost.toLocaleString("en-IN")}
+                      ₹{order.total_cost.toLocaleString("en-IN")}
                     </div>
                     <div className="text-[10px] text-muted-foreground/60">
-                      {new Date(order.createdAt).toLocaleString("en-IN", {
+                      {new Date(order.created_at).toLocaleString("en-IN", {
                         day: "2-digit",
                         month: "short",
                         hour: "2-digit",
@@ -557,12 +592,13 @@ function Portfolio() {
                       })}
                     </div>
                   </div>
-                  {order.status === "queued" && user?.id && (
-                    <button
-                      onClick={() => {
-                        cancelQueuedOrder(user.id, order.id);
-                        setOrders(getQueuedOrders(user.id));
-                      }}
+                    {order.status === "queued" && user?.id && (
+                        <button
+                          onClick={async () => {
+                            await cancelQueuedOrder(user.id, order.id);
+                            const updated = await getQueuedOrders(user.id);
+                            setOrders(updated);
+                          }}
                       className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg border border-border/40 hover:border-border"
                     >
                       Cancel
@@ -603,7 +639,7 @@ function Portfolio() {
               ))}
             </div>
           </div>
-          <PerformanceChart totalValue={totalValue} />
+          <PerformanceChart totalValue={totalValue} hasRealHistory={false} />
           <div className="mt-3 flex items-center gap-4 text-xs">
             <span className="inline-flex items-center gap-2">
               <span className="w-3 h-0.5 bg-[var(--bull)]" /> Your portfolio
@@ -894,18 +930,28 @@ function Portfolio() {
                       placeholder="Search Indian stocks..."
                       className="w-full bg-background/50 border border-border/60 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-primary/50"
                     />
-                    {showStockDropdown && filteredStocks.length > 0 && (
+                    {showStockDropdown && searchResults.length > 0 && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/60 rounded-xl shadow-lg max-h-48 overflow-y-auto z-10">
-                        {filteredStocks.slice(0, 6).map((s) => (
+                        {searchResults.slice(0, 8).map((s) => (
                           <button
-                            key={s.ticker}
-                            onClick={() => handleStockSelect(s)}
+                            key={s.instrument_key}
+                            onClick={() => handleStockSelect({ ticker: s.trading_symbol, name: s.name })}
                             className="w-full px-4 py-2 text-left hover:bg-card/60 transition text-sm"
                           >
-                            <span className="font-mono text-primary">{s.ticker}</span>
+                            <span className="font-mono text-primary">{s.trading_symbol}</span>
                             <span className="text-muted-foreground ml-2">{s.name}</span>
                           </button>
                         ))}
+                      </div>
+                    )}
+                    {showStockDropdown && searchLoading && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/60 rounded-xl shadow-lg z-10 p-3 text-center text-sm text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" />Searching...
+                      </div>
+                    )}
+                    {showStockDropdown && !searchLoading && searchQuery && searchResults.length === 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/60 rounded-xl shadow-lg z-10 p-3 text-center text-sm text-muted-foreground">
+                        No stocks found for "{searchQuery}"
                       </div>
                     )}
                   </div>
@@ -930,12 +976,12 @@ function Portfolio() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm text-muted-foreground mb-1.5 block">Quantity</label>
+                        <label className="text-sm text-muted-foreground mb-1.5 block">Quantity</label>
                     <input
-                      type="number"
-                      min={1}
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                      type="text"
+                      inputMode="numeric"
+                      value={quantityInput}
+                      onChange={(e) => { const v = e.target.value; if (v === "" || /^\d+$/.test(v)) setQuantityInput(v); }}
                       className="w-full bg-background/50 border border-border/60 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-primary/50"
                     />
                   </div>
@@ -972,6 +1018,14 @@ function Portfolio() {
                       ₹{cashBalance.toLocaleString("en-IN")}
                     </span>
                   </div>
+                  {selectedStock && effectivePrice > 0 && (
+                    <div className="flex items-center justify-between text-xs mt-1">
+                      <span className="text-muted-foreground">Remaining after purchase</span>
+                      <span className={totalCost > cashBalance ? "text-[var(--bear)]" : ""}>
+                        ₹{Math.max(0, cashBalance - totalCost).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  )}
                   {totalCost > cashBalance && (
                     <div className="text-xs text-[var(--bear)] mt-2">Insufficient funds</div>
                   )}
@@ -998,8 +1052,8 @@ function Portfolio() {
                   {buying
                     ? "Processing..."
                     : marketStatus.open
-                      ? `Buy ${quantity} Share${quantity > 1 ? "s" : ""}`
-                      : `Queue ${quantity} Share${quantity > 1 ? "s" : ""}`}
+                      ? `Buy ${buyQty} Share${buyQty > 1 ? "s" : ""}`
+                      : `Queue ${buyQty} Share${buyQty > 1 ? "s" : ""}`}
                 </button>
               </div>
             </motion.div>
@@ -1177,6 +1231,12 @@ function Portfolio() {
                       </div>
                     </div>
                   </div>
+                  <div className="text-xs text-muted-foreground mt-2 text-right">
+                    {holdingAction === "buy"
+                      ? `Remaining: ₹${Math.max(0, cashBalance - holdingQuantity * selectedHolding.currentPrice).toLocaleString("en-IN")}`
+                      : `Cash after sale: ₹${Math.max(0, cashBalance + holdingQuantity * selectedHolding.currentPrice).toLocaleString("en-IN")}`
+                    }
+                  </div>
                   <button
                     onClick={async () => {
                       if (!user?.id) return;
@@ -1198,7 +1258,7 @@ function Portfolio() {
                             );
                           }
                         } else if (user?.id) {
-                          addQueuedOrder(
+                          await addQueuedOrder(
                             user.id,
                             selectedHolding.ticker,
                             selectedHolding.company_name || selectedHolding.ticker,
@@ -1206,7 +1266,8 @@ function Portfolio() {
                             holdingQuantity,
                             selectedHolding.currentPrice,
                           );
-                          setOrders(getQueuedOrders(user.id));
+                          const updated = await getQueuedOrders(user.id);
+                          setOrders(updated);
                         }
                         setSelectedHolding(null);
                       } catch (e) {
@@ -1334,82 +1395,156 @@ function Portfolio() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Reset Portfolio Modal */}
+      <AnimatePresence>
+        {showResetModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowResetModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-gradient-card border border-border/60 rounded-3xl p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-[var(--bear)]" />
+                  Reset Portfolio
+                </h2>
+                <button onClick={() => setShowResetModal(false)} className="p-2 hover:bg-card/60 rounded-xl transition">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 rounded-xl bg-[var(--bear)]/10 border border-[var(--bear)]/20 mb-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-[var(--bear)] shrink-0 mt-0.5" />
+                  <div className="text-sm text-muted-foreground leading-relaxed">
+                    <strong className="text-foreground">Use only in extreme cases.</strong>
+                    <br />
+                    We want to make this a real portfolio experience. If you made a mistake and need a fresh start, this will:
+                  </div>
+                </div>
+                <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground ml-8 list-disc">
+                  <li>Clear all your holdings</li>
+                  <li>Delete all transaction history</li>
+                  <li>Restore virtual cash to ₹2,50,000</li>
+                </ul>
+                <p className="mt-3 text-sm text-muted-foreground italic">
+                  Happy learning! 📈
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowResetModal(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-card/40 border border-border/40 hover:bg-card/60 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResetPortfolio}
+                  disabled={resetting}
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-[var(--bear)] text-white py-2.5 rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition"
+                >
+                  {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {resetting ? "Resetting..." : "Reset Portfolio"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function PerformanceChart({ totalValue: tv }: { totalValue: number }) {
+function PerformanceChart({ totalValue: tv, hasRealHistory }: { totalValue: number; hasRealHistory: boolean }) {
   const data = useMemo(() => generateEquityCurve(tv), [tv]);
   if (data.length === 0) return null;
 
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
-        <defs>
-          <linearGradient id="portfolioGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--bull)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="var(--bull)" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="niftyGradient" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="oklch(0.6 0.15 200)" stopOpacity="0.15" />
-            <stop offset="100%" stopColor="oklch(0.6 0.15 200)" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <XAxis
-          dataKey="date"
-          tick={{ fontSize: 10, fill: "oklch(0.5 0 0)" }}
-          tickLine={false}
-          axisLine={false}
-          interval="preserveStartEnd"
-          minTickGap={40}
-        />
-        <YAxis
-          tick={{ fontSize: 10, fill: "oklch(0.5 0 0)" }}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(v: number) => `₹${(v / 1000).toFixed(0)}K`}
-          width={50}
-          domain={["dataMin - 500", "dataMax + 500"]}
-        />
-        <Tooltip
-          content={({ active, payload, label }) => {
-            if (!active || !payload?.length) return null;
-            return (
-              <div className="rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
-                <div className="text-muted-foreground mb-1">{label}</div>
-                {payload.map((p) => (
-                  <div key={p.dataKey} className="flex items-center gap-2 font-mono">
-                    <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-                    <span>{p.name === "value" ? "Portfolio" : "NIFTY 50"}</span>
-                    <span className="font-semibold tabular-nums">
-                      ₹{p.value?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            );
-          }}
-        />
-        <Area
-          type="monotone"
-          dataKey="nifty"
-          stroke="oklch(0.6 0.15 200)"
-          strokeWidth={1.5}
-          strokeDasharray="4 3"
-          fill="url(#niftyGradient)"
-          dot={false}
-          activeDot={false}
-        />
-        <Area
-          type="monotone"
-          dataKey="value"
-          stroke="var(--bull)"
-          strokeWidth={2}
-          fill="url(#portfolioGradient)"
-          dot={false}
-          activeDot={{ r: 3, strokeWidth: 0, fill: "var(--bull)" }}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div>
+      <ResponsiveContainer width="100%" height={220}>
+        <AreaChart data={data} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+          <defs>
+            <linearGradient id="portfolioGradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--bull)" stopOpacity="0.3" />
+              <stop offset="100%" stopColor="var(--bull)" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="niftyGradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="oklch(0.6 0.15 200)" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="oklch(0.6 0.15 200)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 10, fill: "oklch(0.5 0 0)" }}
+            tickLine={false}
+            axisLine={false}
+            interval="preserveStartEnd"
+            minTickGap={40}
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: "oklch(0.5 0 0)" }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v: number) => `₹${(v / 1000).toFixed(0)}K`}
+            width={50}
+            domain={["dataMin - 500", "dataMax + 500"]}
+          />
+          <Tooltip
+            content={({ active, payload, label }) => {
+              if (!active || !payload?.length) return null;
+              return (
+                <div className="rounded-lg border border-border/50 bg-background px-3 py-2 text-xs shadow-xl">
+                  <div className="text-muted-foreground mb-1">{label}</div>
+                  {payload.map((p) => (
+                    <div key={p.dataKey} className="flex items-center gap-2 font-mono">
+                      <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                      <span>{p.name === "value" ? "Portfolio" : "NIFTY 50"}</span>
+                      <span className="font-semibold tabular-nums">
+                        ₹{p.value?.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            }}
+          />
+          <Area
+            type="monotone"
+            dataKey="nifty"
+            stroke="oklch(0.6 0.15 200)"
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+            fill="url(#niftyGradient)"
+            dot={false}
+            activeDot={false}
+          />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke="var(--bull)"
+            strokeWidth={2}
+            fill="url(#portfolioGradient)"
+            dot={false}
+            activeDot={{ r: 3, strokeWidth: 0, fill: "var(--bull)" }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+      {!hasRealHistory && (
+        <div className="text-[10px] text-muted-foreground text-center mt-2 italic">
+          Simulated projection based on current portfolio value. Real performance data will appear as you accumulate trade history.
+        </div>
+      )}
+    </div>
   );
 }

@@ -200,9 +200,31 @@ export async function addTransaction(
 }
 
 export async function resetPortfolio(userId: string): Promise<void> {
-  const { error } = await supabase.from("portfolios").delete().eq("user_id", userId);
+  const { error: portfolioError } = await supabase.from("portfolios").delete().eq("user_id", userId);
+  if (portfolioError) throw portfolioError;
 
-  if (error) throw error;
+  const { error: txnError } = await supabase.from("transactions").delete().eq("user_id", userId);
+  if (txnError) throw txnError;
+
+  const existing = await getUserProfile(userId);
+  if (existing) {
+    await updateQuizResponse(userId, { starting_balance: 250000 });
+  } else {
+    const { error } = await supabase.from("quiz_responses").insert({
+      user_id: userId,
+      starting_balance: 250000,
+      income_level: "",
+      investment_amount: "",
+      goal: "",
+      risk_appetite: "med-high",
+      time_horizon: "",
+      knowledge_level: "",
+      sector_preference: [],
+      portfolio_mode: "manual",
+      portfolio_resets_remaining: 2,
+    });
+    if (error) throw error;
+  }
 }
 
 export async function getUserCashBalance(userId: string): Promise<number> {
@@ -212,7 +234,25 @@ export async function getUserCashBalance(userId: string): Promise<number> {
 }
 
 export async function updateUserCashBalance(userId: string, newBalance: number): Promise<void> {
-  await updateQuizResponse(userId, { starting_balance: newBalance });
+  const existing = await getUserProfile(userId);
+  if (existing) {
+    await updateQuizResponse(userId, { starting_balance: newBalance });
+  } else {
+    const { error } = await supabase.from("quiz_responses").insert({
+      user_id: userId,
+      starting_balance: newBalance,
+      income_level: "",
+      investment_amount: "",
+      goal: "",
+      risk_appetite: "med-high",
+      time_horizon: "",
+      knowledge_level: "",
+      sector_preference: [],
+      portfolio_mode: "manual",
+      portfolio_resets_remaining: 2,
+    });
+    if (error) throw error;
+  }
 }
 
 export async function getWatchlist(userId: string): Promise<Watchlist[]> {
@@ -264,4 +304,94 @@ export async function isInWatchlist(userId: string, ticker: string): Promise<boo
 
   if (error) throw error;
   return !!data;
+}
+
+export type QueuedOrder = {
+  id: string;
+  user_id: string;
+  ticker: string;
+  company_name: string;
+  type: "buy" | "sell";
+  quantity: number;
+  price: number;
+  total_cost: number;
+  created_at: string;
+  status: "queued" | "executed" | "cancelled";
+};
+
+export async function getQueuedOrders(userId: string): Promise<QueuedOrder[]> {
+  const { data, error } = await supabase
+    .from("queued_orders")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addQueuedOrder(
+  userId: string,
+  ticker: string,
+  companyName: string,
+  type: "buy" | "sell",
+  quantity: number,
+  price: number,
+): Promise<QueuedOrder> {
+  const { data, error } = await supabase
+    .from("queued_orders")
+    .insert({
+      user_id: userId,
+      ticker,
+      company_name: companyName,
+      type,
+      quantity,
+      price,
+      total_cost: quantity * price,
+      status: "queued",
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function cancelQueuedOrder(userId: string, id: string): Promise<void> {
+  const { error } = await supabase
+    .from("queued_orders")
+    .update({ status: "cancelled" })
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+}
+
+export async function executeQueuedOrders(
+  userId: string,
+  buy: (ticker: string, companyName: string, quantity: number, price: number) => Promise<unknown>,
+  sell: (ticker: string, quantity: number, price: number) => Promise<unknown>,
+): Promise<number> {
+  const orders = await getQueuedOrders(userId);
+  const pending = orders.filter((o) => o.status === "queued");
+  let executed = 0;
+
+  for (const order of pending) {
+    try {
+      if (order.type === "buy") {
+        await buy(order.ticker, order.company_name, order.quantity, order.price);
+      } else {
+        await sell(order.ticker, order.quantity, order.price);
+      }
+      await supabase
+        .from("queued_orders")
+        .update({ status: "executed" })
+        .eq("id", order.id);
+      executed++;
+    } catch {
+      // skip failed orders
+    }
+  }
+
+  return executed;
 }

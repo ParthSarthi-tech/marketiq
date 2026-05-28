@@ -1,4 +1,3 @@
-const UPSTOX_ACCESS_TOKEN = import.meta.env.VITE_UPSTOX_ACCESS_TOKEN;
 const UPSTOX_BASE_URL = "https://api.upstox.com/v3";
 const UPSTOX_V2_URL = "https://api.upstox.com/v2";
 
@@ -21,33 +20,20 @@ function clearCache(): void {
   cache.clear();
 }
 
-function getHeaders(): Record<string, string> {
-  return {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    Authorization: `Bearer ${UPSTOX_ACCESS_TOKEN}`,
-  };
-}
-
 async function upstoxFetch<T>(url: string, cacheKey?: string): Promise<T> {
   if (cacheKey) {
     const cached = getCached<T>(cacheKey);
     if (cached) return cached;
   }
 
-  const response = await fetch(url, { headers: getHeaders() });
+  const { proxyUpstoxFetch } = await import("./upstox-proxy");
+  const data = await proxyUpstoxFetch({ data: { url, method: "GET" } });
 
-  if (response.status === 429) {
-    await new Promise((r) => setTimeout(r, 1000));
-    return upstoxFetch<T>(url, cacheKey);
+  const errData = data as { status?: string; error?: unknown };
+  if (errData.status === "error") {
+    throw new Error(`Upstox API error: ${JSON.stringify(errData.error)}`);
   }
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(`Upstox API error: ${response.status} — ${JSON.stringify(errorData)}`);
-  }
-
-  const data = await response.json();
   if (cacheKey) setCache(cacheKey, data);
   return data as T;
 }
@@ -580,20 +566,8 @@ export function isMarketPreOpen(): boolean {
 
 export async function getWebSocketAuthUrl(): Promise<string | null> {
   try {
-    const url = `${UPSTOX_BASE_URL}/feed/market-data-feed/authorize`;
-    const headers = {
-      ...getHeaders(),
-      Accept: "application/json",
-    };
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`WebSocket auth failed: ${JSON.stringify(errorData)}`);
-    }
-
-    const data = await response.json();
-    return data.data?.authorized_redirect_uri || null;
+    const { proxyGetWebSocketAuthUrl } = await import("./upstox-proxy");
+    return await proxyGetWebSocketAuthUrl();
   } catch (e) {
     console.error("Failed to get WebSocket auth URL:", e);
     return null;

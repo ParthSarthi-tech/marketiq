@@ -8,6 +8,8 @@ import { NewsCard, NewsCardSkeleton, NewsEmptyState } from "@/components/app/new
 import { fetchNews, type NewsArticle } from "@/lib/news";
 import { FILTER_CATEGORIES } from "@/lib/stockMetadata";
 
+const PAGE_SIZE = 12;
+
 export const Route = createFileRoute("/app/news")({
   component: NewsPage,
   head: () => ({
