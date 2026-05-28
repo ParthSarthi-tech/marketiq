@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUserProfile } from "@/hooks/useUserProfile";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useAI } from "@/hooks/useAI";
+import { ChatMessage } from "@/components/app/chat-message";
 
 export const Route = createFileRoute("/app/advisor")({
   component: Advisor,
@@ -69,31 +70,30 @@ function Advisor() {
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4">
           {messages.map((m, i) => (
-            <motion.div
+            <ChatMessage
               key={i}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                m.role === "user"
-                  ? "bg-gradient-primary text-primary-foreground rounded-tr-sm shadow-glow"
-                  : "bg-card/60 border border-border/40 rounded-tl-sm text-foreground"
-              }`}>
-                {m.content}
-              </div>
-            </motion.div>
+              role={m.role}
+              content={m.content}
+              isLatest={i === messages.length - 1}
+            />
           ))}
           <AnimatePresence>
             {isLoading && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex justify-start">
-                <div className="bg-card/60 border border-border/40 rounded-2xl rounded-tl-sm px-4 py-3 inline-flex gap-1">
+                <div
+                  className="rounded-2xl rounded-tl-sm px-4 py-3 inline-flex gap-1"
+                  style={{
+                    background: "linear-gradient(135deg, oklch(0.25 0.04 160 / 0.4), oklch(0.2 0.02 150 / 0.35))",
+                    border: "1px solid oklch(0.78 0.18 155 / 0.25)",
+                  }}
+                >
                   {[0, 1, 2].map((i) => (
                     <motion.span
                       key={i}
                       animate={{ y: [0, -4, 0], opacity: [0.4, 1, 0.4] }}
                       transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }}
-                      className="w-1.5 h-1.5 rounded-full bg-primary"
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{ background: "var(--bull)" }}
                     />
                   ))}
                 </div>

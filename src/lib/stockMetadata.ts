@@ -497,6 +497,44 @@ export function getCsvFile(ticker: string): string | null {
   return STOCK_CONFIG[ticker]?.csvFile || null;
 }
 
+export type RiskProfile = "low" | "med-low" | "med-high" | "high";
+
+export type StockSet = {
+  title: string;
+  tickers: [string, string, string];
+};
+
+export const PROFILE_STOCKS: Record<RiskProfile, StockSet[]> = {
+  low: [
+    { title: "Blue-Chip Anchors", tickers: ["HDFCBANK", "ITC", "HINDUNILVR"] },
+    { title: "Defensive Leaders", tickers: ["SUNPHARMA", "KOTAKBANK", "MARUTI"] },
+    { title: "Dividend Income", tickers: ["COALINDIA", "RECLTD", "BRITANNIA"] },
+    { title: "Value Plays", tickers: ["ICICIBANK", "SBIN", "TCS"] },
+    { title: "Steady Compounders", tickers: ["ASIANPAINT", "TITAN", "AXISBANK"] },
+  ],
+  "med-low": [
+    { title: "Core Holdings", tickers: ["TCS", "HDFCBANK", "ITC"] },
+    { title: "Growth & Stability", tickers: ["RELIANCE", "BHARTIARTL", "SBIN"] },
+    { title: "Quality Franchises", tickers: ["ASIANPAINT", "TITAN", "MARUTI"] },
+    { title: "Sector Leaders", tickers: ["ICICIBANK", "INFY", "WIPRO"] },
+    { title: "Financial Strength", tickers: ["KOTAKBANK", "AXISBANK", "SUNPHARMA"] },
+  ],
+  "med-high": [
+    { title: "Growth Drivers", tickers: ["RELIANCE", "INFY", "TCS"] },
+    { title: "Financial Powerhouses", tickers: ["HDFCBANK", "ICICIBANK", "BAJFINANCE"] },
+    { title: "Consumer Champions", tickers: ["MARUTI", "TITAN", "HINDUNILVR"] },
+    { title: "Tech & Innovation", tickers: ["WIPRO", "BHARTIARTL", "LT"] },
+    { title: "Emerging Leaders", tickers: ["ADANIPORTS", "AXISBANK", "ITC"] },
+  ],
+  high: [
+    { title: "High Growth", tickers: ["BAJFINANCE", "LT", "ADANIPORTS"] },
+    { title: "Momentum Plays", tickers: ["HAL", "IRFC", "SUZLON"] },
+    { title: "Infrastructure Boom", tickers: ["JSWSTEEL", "COALINDIA", "RECLTD"] },
+    { title: "Next-Gen Leaders", tickers: ["JIOFIN", "IRCTC", "BEL"] },
+    { title: "Industrial Powerhouses", tickers: ["POLYCAB", "BERGEPAINT", "M&M"] },
+  ],
+};
+
 export function getAllTickers(): string[] {
   return Object.keys(STOCK_CONFIG);
 }

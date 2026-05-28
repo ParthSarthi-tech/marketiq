@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, type ReactNode } from "react";
 import { ArrowRight, Eye, EyeOff, Loader2, Mail, Lock, User, CheckCircle2 } from "lucide-react";
 import { z } from "zod";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, Link } from "@tanstack/react-router";
 import { supabase } from "@/lib/supabase";
 
 const signInSchema = z.object({
@@ -350,10 +350,10 @@ export function AuthForm({ mode, cta }: Props) {
           <input type="checkbox" required className="mt-0.5 accent-[var(--primary)]" />
           <span>
             I agree to the{" "}
-            <a className="text-foreground hover:text-accent transition story-link">Terms</a> and{" "}
-            <a className="text-foreground hover:text-accent transition story-link">
+            <Link to="/terms" className="text-foreground hover:text-accent transition story-link underline">Terms</Link> and{" "}
+            <Link to="/privacy" className="text-foreground hover:text-accent transition story-link underline">
               Privacy Policy
-            </a>
+            </Link>
             .
           </span>
         </motion.label>

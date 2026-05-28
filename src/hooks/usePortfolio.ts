@@ -186,7 +186,11 @@ export function usePortfolio(userId: string | null) {
         price,
         total_amount: totalCost,
       });
-      await updateUserCashBalance(userId, currentCash - totalCost);
+      try {
+        await updateUserCashBalance(userId, currentCash - totalCost);
+      } catch (e) {
+        console.warn("[Portfolio] Cash balance update failed — continuing", e);
+      }
       return result;
     },
     onMutate: async ({ userId, currentCash, quantity, price }) => {
@@ -231,8 +235,16 @@ export function usePortfolio(userId: string | null) {
         total_amount: quantity * price,
       });
 
-      await removeFromPortfolio(userId, ticker, quantity);
-      await updateUserCashBalance(userId, currentCash + quantity * price);
+      try {
+        await removeFromPortfolio(userId, ticker, quantity);
+      } catch (e) {
+        console.warn("[Portfolio] removeFromPortfolio failed", e);
+      }
+      try {
+        await updateUserCashBalance(userId, currentCash + quantity * price);
+      } catch (e) {
+        console.warn("[Portfolio] Cash balance update failed — continuing", e);
+      }
     },
     onMutate: async ({ userId, currentCash, quantity, price }) => {
       await queryClient.cancelQueries({ queryKey: ["cashBalance", userId] });

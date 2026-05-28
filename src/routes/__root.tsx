@@ -72,14 +72,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "MarketIQ — Your Smart Stock Guide" },
+      { name: "description", content: "MarketIQ is a modern web application for Indian stock market analysis, virtual portfolio management, and AI-powered investment research." },
+      { name: "author", content: "Parth Sarthi" },
+      { property: "og:title", content: "MarketIQ — Your Smart Stock Guide" },
+      { property: "og:description", content: "Learn, practice and grow with virtual portfolios and AI-powered stock insights." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {

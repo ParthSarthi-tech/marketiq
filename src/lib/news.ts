@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { STOCK_CONFIG } from "./stockMetadata";
 
 export interface NewsArticle {
   uuid: string;
@@ -23,6 +24,7 @@ interface NewsPayload {
   limit?: number;
   page?: number;
   filterEntities?: boolean;
+  sector?: string;
 }
 
 export const fetchNews = createServerFn({ method: "GET" })
@@ -34,7 +36,14 @@ export const fetchNews = createServerFn({ method: "GET" })
         return { articles: [], total: 0, error: "MarketAux API key not configured." };
       }
 
-      const { symbols, limit = 20, page = 1, filterEntities = true } = ctx.data;
+      let { symbols, limit = 20, page = 1, filterEntities = true, sector } = ctx.data;
+
+      if (sector && sector !== "all") {
+        const tickers = Object.values(STOCK_CONFIG)
+          .filter((s) => s.tags.includes(sector))
+          .map((s) => s.ticker);
+        if (tickers.length > 0) symbols = tickers.join(",");
+      }
 
       const params = new URLSearchParams({
         api_token: apiKey,

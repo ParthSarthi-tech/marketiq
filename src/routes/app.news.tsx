@@ -42,6 +42,7 @@ function NewsPage() {
           limit: 12,
           page,
           filterEntities: true,
+          sector: sectorFilter,
         },
       }),
     staleTime: 120_000,

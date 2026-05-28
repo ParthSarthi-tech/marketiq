@@ -8,6 +8,7 @@ import { useWatchlist, useRemoveFromWatchlist } from "@/hooks/useWatchlist";
 import { useMultipleQuotes } from "@/hooks/useStocks";
 import { addQueuedOrder } from "@/lib/orderQueue";
 import { isMarketOpenBool } from "@/lib/marketUtils";
+import { toast } from "sonner";
 import { useState } from "react";
 
 export const Route = createFileRoute("/app/watchlist")({
@@ -47,7 +48,7 @@ function Watchlist() {
       setAddSuccess(true);
       setTimeout(() => { setAddTarget(null); setAddSuccess(false); }, 1500);
     } catch {
-      // handled
+      toast.error("Failed to add to portfolio", { description: "Please try again." });
     } finally {
       setAdding(false);
     }

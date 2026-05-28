@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
-import { Search, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
+import { Search, ArrowUpRight, ArrowDownRight, Loader2, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/app/widgets";
 import { useAuth } from "@/hooks/useAuth";
-import { getTransactions } from "@/lib/db";
+import { getTransactions, clearTransactions } from "@/lib/db";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/history")({
   component: HistoryPage,
@@ -19,8 +20,11 @@ export const Route = createFileRoute("/app/history")({
 
 function HistoryPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<"all" | "buy" | "sell">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const { data: transactions = [], isLoading } = useQuery({
     queryKey: ["transactions", user?.id],
@@ -44,11 +48,37 @@ function HistoryPage() {
     return result;
   }, [transactions, filter, searchQuery]);
 
+  const handleClear = async () => {
+    if (!user?.id) return;
+    setClearing(true);
+    try {
+      await clearTransactions(user.id);
+      queryClient.invalidateQueries({ queryKey: ["transactions", user.id] });
+      toast.success("History cleared", { description: "All transactions deleted." });
+      setShowClearModal(false);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to clear history");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <PageHeader
         title="Transaction History"
         subtitle="All your buy and sell transactions"
+        action={
+          transactions.length > 0 ? (
+            <button
+              onClick={() => setShowClearModal(true)}
+              className="inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition text-[var(--bear)]"
+            >
+              <Trash2 className="w-4 h-4" /> Clear all
+            </button>
+          ) : undefined
+        }
       />
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -175,6 +205,38 @@ function HistoryPage() {
           <div className="p-4 border-t border-border/40 text-[10px] text-muted-foreground font-mono text-center">
             {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
           </div>
+        </div>
+      )}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-card rounded-3xl p-6 max-w-sm w-full border border-border/60 shadow-xl"
+          >
+            <h3 className="font-semibold mb-2">Clear all transaction history?</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              This will permanently delete all {transactions.length} transaction
+              {transactions.length !== 1 ? "s" : ""}. Your portfolio holdings and
+              cash balance will not be affected.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearModal(false)}
+                className="flex-1 p-3 rounded-xl bg-card border border-border/40 hover:bg-card/60 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClear}
+                disabled={clearing}
+                className="flex-1 p-3 rounded-xl bg-[var(--bear)]/15 text-[var(--bear)] border border-[var(--bear)]/30 hover:bg-[var(--bear)]/25 transition text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {clearing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete all
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

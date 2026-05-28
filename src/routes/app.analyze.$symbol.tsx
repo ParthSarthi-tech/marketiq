@@ -1,4 +1,4 @@
-import { createFileRoute, useParams } from "@tanstack/react-router";
+import { createFileRoute, Link, useParams, useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
@@ -11,8 +11,9 @@ import { fetchNews, tickerToMarketAuxSymbol, type NewsArticle } from "@/lib/news
 import { NewsCard, NewsCardSkeleton } from "@/components/app/news-card";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
-import { addQueuedOrder } from "@/lib/orderQueue";
 import { isMarketOpenBool } from "@/lib/marketUtils";
+import { addQueuedOrder } from "@/lib/orderQueue";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/analyze/$symbol")({
   component: StockAnalyze,
@@ -73,6 +74,7 @@ function StockAnalyze() {
   const [showBuyConfirm, setShowBuyConfirm] = useState(false);
 
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { buy, isBuying, cashBalance } = usePortfolio(user?.id ?? null);
 
   const marketOpen = isMarketOpenBool();
@@ -116,9 +118,9 @@ function StockAnalyze() {
                 Pro
               </button>
             )}
-            <a href="/app/discover" className="inline-flex items-center gap-2 glass px-4 py-2.5 rounded-xl text-sm hover:bg-card/60 transition">
+            <Link to="/app/discover" className="inline-flex items-center gap-2 glass px-4 py-2.5 rounded-xl text-sm hover:bg-card/60 transition">
               <ArrowLeft className="w-4 h-4" /> Back to Discover
-            </a>
+            </Link>
           </div>
         }
       />
@@ -316,17 +318,25 @@ function StockAnalyze() {
                 type="button"
                 onClick={async () => {
                   setShowBuyConfirm(false);
-                  try {
-                    setBuySuccess(false);
-                    setBuyQueued(false);
-                    if (marketOpen) {
-                      await buy(symbol, companyName, buyQty, price);
-                    } else if (user?.id) {
-                      await addQueuedOrder(user.id, symbol, companyName, "buy", buyQty, price);
-                      setBuyQueued(true);
-                    }
-                    setBuySuccess(true);
-                  } catch { /* handled */ }
+                    try {
+                      setBuySuccess(false);
+                      setBuyQueued(false);
+                      if (marketOpen) {
+                        await buy(symbol, companyName, buyQty, price);
+                      } else if (user?.id) {
+                        await addQueuedOrder(user.id, symbol, companyName, "buy", buyQty, price);
+                        setBuyQueued(true);
+                      }
+                      setBuySuccess(true);
+                      toast(`${symbol} added to portfolio`, {
+                      description: `${buyQty} share${buyQty > 1 ? "s" : ""} at ₹${price.toLocaleString("en-IN")}`,
+                      action: { label: "View Portfolio", onClick: () => navigate({ to: "/app/portfolio" }) },
+                    });
+                  } catch (e: unknown) {
+                    toast.error("Failed to add holding", {
+                      description: e instanceof Error ? e.message : "Something went wrong.",
+                    });
+                  }
                 }}
                 disabled={isBuying}
                 className="flex-1 inline-flex items-center justify-center gap-2 bg-gradient-primary text-primary-foreground py-2.5 rounded-xl text-sm font-semibold shadow-glow hover:opacity-90 disabled:opacity-40 transition"
@@ -1029,8 +1039,8 @@ function calculateStability(data: number[]): number {
 }
 
 function formatCompact(val: number): string {
-  if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L Cr`;
-  if (val >= 100) return `₹${val.toFixed(0)} Cr`;
+  if (val >= 10000000) return `₹${(val / 10000000).toFixed(1)} Cr`;
+  if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`;
   return `₹${val.toFixed(0)}`;
 }
 

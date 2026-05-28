@@ -31,9 +31,9 @@ export function DisclosureFooter() {
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-foreground mb-3">Legal</div>
             <div className="space-y-2">
-              <a href="#" className="block text-xs text-muted-foreground hover:text-foreground transition">Privacy Policy</a>
-              <a href="#" className="block text-xs text-muted-foreground hover:text-foreground transition">Terms of Service</a>
-              <a href="#" className="block text-xs text-muted-foreground hover:text-foreground transition">Disclosures</a>
+              <Link to="/privacy" className="block text-xs text-muted-foreground hover:text-foreground transition">Privacy Policy</Link>
+              <Link to="/terms" className="block text-xs text-muted-foreground hover:text-foreground transition">Terms of Service</Link>
+              <Link to="/disclosures" className="block text-xs text-muted-foreground hover:text-foreground transition">Disclosures</Link>
             </div>
           </div>
         </div>

@@ -9,11 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
 import { Route as FeaturesRouteImport } from './routes/features'
+import { Route as DisclosuresRouteImport } from './routes/disclosures'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as AiAdvisorRouteImport } from './routes/ai-advisor'
 import { Route as IndexRouteImport } from './routes/index'
@@ -29,6 +32,11 @@ import { Route as AppDiscoverRouteImport } from './routes/app.discover'
 import { Route as AppAdvisorRouteImport } from './routes/app.advisor'
 import { Route as AppAnalyzeSymbolRouteImport } from './routes/app.analyze.$symbol'
 
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: '/sign-up',
   path: '/sign-up',
@@ -37,6 +45,11 @@ const SignUpRoute = SignUpRouteImport.update({
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LearnRoute = LearnRouteImport.update({
@@ -52,6 +65,11 @@ const HowItWorksRoute = HowItWorksRouteImport.update({
 const FeaturesRoute = FeaturesRouteImport.update({
   id: '/features',
   path: '/features',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DisclosuresRoute = DisclosuresRouteImport.update({
+  id: '/disclosures',
+  path: '/disclosures',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppRoute = AppRouteImport.update({
@@ -129,11 +147,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ai-advisor': typeof AiAdvisorRoute
   '/app': typeof AppRouteWithChildren
+  '/disclosures': typeof DisclosuresRoute
   '/features': typeof FeaturesRoute
   '/how-it-works': typeof HowItWorksRoute
   '/learn': typeof LearnRoute
+  '/privacy': typeof PrivacyRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/terms': typeof TermsRoute
   '/app/advisor': typeof AppAdvisorRoute
   '/app/discover': typeof AppDiscoverRoute
   '/app/history': typeof AppHistoryRoute
@@ -149,11 +170,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ai-advisor': typeof AiAdvisorRoute
+  '/disclosures': typeof DisclosuresRoute
   '/features': typeof FeaturesRoute
   '/how-it-works': typeof HowItWorksRoute
   '/learn': typeof LearnRoute
+  '/privacy': typeof PrivacyRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/terms': typeof TermsRoute
   '/app/advisor': typeof AppAdvisorRoute
   '/app/discover': typeof AppDiscoverRoute
   '/app/history': typeof AppHistoryRoute
@@ -171,11 +195,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/ai-advisor': typeof AiAdvisorRoute
   '/app': typeof AppRouteWithChildren
+  '/disclosures': typeof DisclosuresRoute
   '/features': typeof FeaturesRoute
   '/how-it-works': typeof HowItWorksRoute
   '/learn': typeof LearnRoute
+  '/privacy': typeof PrivacyRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/terms': typeof TermsRoute
   '/app/advisor': typeof AppAdvisorRoute
   '/app/discover': typeof AppDiscoverRoute
   '/app/history': typeof AppHistoryRoute
@@ -194,11 +221,14 @@ export interface FileRouteTypes {
     | '/'
     | '/ai-advisor'
     | '/app'
+    | '/disclosures'
     | '/features'
     | '/how-it-works'
     | '/learn'
+    | '/privacy'
     | '/sign-in'
     | '/sign-up'
+    | '/terms'
     | '/app/advisor'
     | '/app/discover'
     | '/app/history'
@@ -214,11 +244,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/ai-advisor'
+    | '/disclosures'
     | '/features'
     | '/how-it-works'
     | '/learn'
+    | '/privacy'
     | '/sign-in'
     | '/sign-up'
+    | '/terms'
     | '/app/advisor'
     | '/app/discover'
     | '/app/history'
@@ -235,11 +268,14 @@ export interface FileRouteTypes {
     | '/'
     | '/ai-advisor'
     | '/app'
+    | '/disclosures'
     | '/features'
     | '/how-it-works'
     | '/learn'
+    | '/privacy'
     | '/sign-in'
     | '/sign-up'
+    | '/terms'
     | '/app/advisor'
     | '/app/discover'
     | '/app/history'
@@ -257,15 +293,25 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AiAdvisorRoute: typeof AiAdvisorRoute
   AppRoute: typeof AppRouteWithChildren
+  DisclosuresRoute: typeof DisclosuresRoute
   FeaturesRoute: typeof FeaturesRoute
   HowItWorksRoute: typeof HowItWorksRoute
   LearnRoute: typeof LearnRoute
+  PrivacyRoute: typeof PrivacyRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sign-up': {
       id: '/sign-up'
       path: '/sign-up'
@@ -278,6 +324,13 @@ declare module '@tanstack/react-router' {
       path: '/sign-in'
       fullPath: '/sign-in'
       preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/learn': {
@@ -299,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/features'
       fullPath: '/features'
       preLoaderRoute: typeof FeaturesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/disclosures': {
+      id: '/disclosures'
+      path: '/disclosures'
+      fullPath: '/disclosures'
+      preLoaderRoute: typeof DisclosuresRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app': {
@@ -436,11 +496,14 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AiAdvisorRoute: AiAdvisorRoute,
   AppRoute: AppRouteWithChildren,
+  DisclosuresRoute: DisclosuresRoute,
   FeaturesRoute: FeaturesRoute,
   HowItWorksRoute: HowItWorksRoute,
   LearnRoute: LearnRoute,
+  PrivacyRoute: PrivacyRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

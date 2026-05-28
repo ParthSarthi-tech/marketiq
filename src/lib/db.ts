@@ -199,6 +199,11 @@ export async function addTransaction(
   return data;
 }
 
+export async function clearTransactions(userId: string): Promise<void> {
+  const { error } = await supabase.from("transactions").delete().eq("user_id", userId);
+  if (error) throw error;
+}
+
 export async function resetPortfolio(userId: string): Promise<void> {
   const { error: portfolioError } = await supabase.from("portfolios").delete().eq("user_id", userId);
   if (portfolioError) throw portfolioError;
@@ -389,7 +394,7 @@ export async function executeQueuedOrders(
         .eq("id", order.id);
       executed++;
     } catch {
-      // skip failed orders
+      // skip failed individual orders
     }
   }
 

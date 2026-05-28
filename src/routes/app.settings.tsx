@@ -55,7 +55,8 @@ const sections = [
     icon: Bell,
     items: [
       { label: "Notifications", desc: "Market alerts and AI signal updates", action: "Configure" },
-      { label: "Theme", desc: "Appearance and display settings", action: "Coming soon" },
+      // follows system preference
+      { label: "Theme", desc: "Appearance and display settings", action: "Auto (system)" },
     ],
   },
 ];
@@ -144,10 +145,14 @@ function Settings() {
                       key={item.label}
                       className="flex items-center justify-between p-3 rounded-2xl bg-card/40 border border-border/40 hover:border-primary/40 transition cursor-pointer group"
                       onClick={() => {
-                        if (item.label === "Risk profile") navigate({ to: "/app/onboarding" });
+                        if (item.label === "Risk profile") {
+                          if (window.confirm("Retaking the quiz will reset your current risk profile. Continue?")) {
+                            navigate({ to: "/app/onboarding" });
+                          }
+                        }
                         if (item.label === "Reset portfolio") handleResetPortfolio();
                         if (item.label === "Notifications") {
-                          /* placeholder */
+                          toast("Notifications", { description: "Notification preferences coming soon." })
                         }
                       }}
                     >

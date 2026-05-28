@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -145,6 +145,7 @@ function Portfolio() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetting, setResetting] = useState(false);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState<TimeRange>("3M");
   const [targetPcts, setTargetPcts] = useState<Record<string, number>>({});
   const marketStatus = checkMarketOpen();
@@ -153,21 +154,25 @@ function Portfolio() {
 
   useEffect(() => {
     if (!user?.id) return;
-    getQueuedOrders(user.id).then(setOrders);
+    getQueuedOrders(user.id).then(setOrders).catch(() => {});
   }, [user?.id]);
 
   useEffect(() => {
     if (!marketStatus.open || !user?.id) return;
     (async () => {
-      const orders = await getQueuedOrders(user.id);
-      const pending = orders.filter((o) => o.status === "queued");
-      if (pending.length === 0) return;
-      const count = await executeQueuedOrders(user.id, buy, sell);
-      if (count > 0) {
-        setExecutedCount(count);
-        const updated = await getQueuedOrders(user.id);
-        setOrders(updated);
-      }
+      try {
+        const orders = await getQueuedOrders(user.id);
+        const pending = orders.filter((o) => o.status === "queued");
+        if (pending.length === 0) return;
+        const count = await executeQueuedOrders(user.id, buy, sell);
+        if (count > 0) {
+          setExecutedCount(count);
+          const updated = await getQueuedOrders(user.id);
+          setOrders(updated);
+        }
+      } catch (e) {
+          console.warn("[Portfolio] Operation failed", e);
+        }
     })();
   }, [marketStatus.open, user?.id]);
 
@@ -213,6 +218,7 @@ function Portfolio() {
       await resetPortfolio(user.id);
       queryClient.invalidateQueries({ queryKey: ["portfolio", user.id] });
       queryClient.invalidateQueries({ queryKey: ["cashBalance", user.id] });
+      queryClient.invalidateQueries({ queryKey: ["transactions", user.id] });
       toast.success("Portfolio reset", { description: "Reset to ₹2,50,000 virtual cash." });
       setShowResetModal(false);
     } catch (e) {
@@ -239,7 +245,8 @@ function Portfolio() {
       try {
         const results = await searchInstruments(searchQuery, "NSE");
         setSearchResults(results.filter(r => r.segment === "NSE_EQ"));
-      } catch {
+      } catch (e) {
+        console.warn("[Portfolio] Search failed", e);
         setSearchResults([]);
       } finally {
         setSearchLoading(false);
@@ -280,17 +287,14 @@ function Portfolio() {
       if (marketStatus.open) {
         await buy(selectedStock.ticker, selectedStock.name, buyQty, effectivePrice);
       } else {
-        await addQueuedOrder(
-          user.id,
-          selectedStock.ticker,
-          selectedStock.name,
-          "buy",
-          buyQty,
-          effectivePrice,
-        );
+        await addQueuedOrder(user.id, selectedStock.ticker, selectedStock.name, "buy", buyQty, effectivePrice);
         const updated = await getQueuedOrders(user.id);
         setOrders(updated);
       }
+      toast(`${selectedStock.ticker} added to portfolio`, {
+        description: `${buyQty} share${buyQty > 1 ? "s" : ""} at ₹${effectivePrice.toLocaleString("en-IN")}`,
+        action: { label: "View Portfolio", onClick: () => navigate({ to: "/app/portfolio" }) },
+      });
       setShowAddModal(false);
       setSelectedStock(null);
       setQuantityInput("10");
@@ -298,6 +302,9 @@ function Portfolio() {
       setSearchQuery("");
     } catch (e) {
       console.error(e);
+      toast.error("Failed to add holding", {
+        description: e instanceof Error ? e.message : "Something went wrong. Please try again.",
+      });
     } finally {
       setBuying(false);
     }
@@ -1161,8 +1168,7 @@ function Portfolio() {
                     setHoldingQuantity(1);
                     setShowEditHolding(false);
                   }}
-                  disabled={!marketStatus.open}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/30 hover:bg-[var(--bull)]/20 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bull)]/15 text-[var(--bull)] border border-[var(--bull)]/30 hover:bg-[var(--bull)]/20 transition text-sm"
                 >
                   <Plus className="w-4 h-4" /> Buy
                 </button>
@@ -1172,8 +1178,7 @@ function Portfolio() {
                     setHoldingQuantity(1);
                     setShowEditHolding(false);
                   }}
-                  disabled={!marketStatus.open}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bear)]/15 text-[var(--bear)] border border-[var(--bear)]/30 hover:bg-[var(--bear)]/20 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  className="flex items-center justify-center gap-2 py-3 rounded-xl font-semibold bg-[var(--bear)]/15 text-[var(--bear)] border border-[var(--bear)]/30 hover:bg-[var(--bear)]/20 transition text-sm"
                 >
                   <TrendingDown className="w-4 h-4" /> Sell
                 </button>
@@ -1191,7 +1196,7 @@ function Portfolio() {
               </div>
 
               {/* Quick Actions Form */}
-              {holdingAction && marketStatus.open && !showEditHolding && (
+              {holdingAction && !showEditHolding && (
                 <div className="mt-4 p-4 rounded-xl bg-card/50 border border-border/40">
                   <div className="flex items-center gap-2 mb-3">
                     <button
@@ -1237,6 +1242,12 @@ function Portfolio() {
                       : `Cash after sale: ₹${Math.max(0, cashBalance + holdingQuantity * selectedHolding.currentPrice).toLocaleString("en-IN")}`
                     }
                   </div>
+                  {!marketStatus.open && (
+                    <div className="flex items-center gap-1.5 mt-3 p-2 rounded-lg bg-[var(--gold)]/10 border border-[var(--gold)]/20 text-xs text-[var(--gold)]">
+                      <Clock className="w-3 h-3 shrink-0" />
+                      Markets closed — order will be queued and executed when trading opens
+                    </div>
+                  )}
                   <button
                     onClick={async () => {
                       if (!user?.id) return;
@@ -1269,6 +1280,16 @@ function Portfolio() {
                           const updated = await getQueuedOrders(user.id);
                           setOrders(updated);
                         }
+                        if (holdingAction === "buy") {
+                          toast(`${selectedHolding.ticker} added to portfolio`, {
+                            description: `${holdingQuantity} share${holdingQuantity > 1 ? "s" : ""} at ₹${selectedHolding.currentPrice.toLocaleString("en-IN")}`,
+                            action: { label: "View Portfolio", onClick: () => navigate({ to: "/app/portfolio" }) },
+                          });
+                        } else {
+                          toast(`${selectedHolding.ticker} sold`, {
+                            description: `${holdingQuantity} share${holdingQuantity > 1 ? "s" : ""} at ₹${selectedHolding.currentPrice.toLocaleString("en-IN")}`,
+                          });
+                        }
                         setSelectedHolding(null);
                       } catch (e) {
                         console.error(e);
@@ -1285,9 +1306,14 @@ function Portfolio() {
                     className={`w-full mt-4 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition disabled:opacity-50 ${holdingAction === "buy" ? "bg-[var(--bull)] text-[var(--bull)] hover:bg-[var(--bull)]/20" : "bg-[var(--bear)] text-[var(--bear)] hover:bg-[var(--bear)]/20"}`}
                   >
                     {performingAction ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    {holdingAction === "buy"
-                      ? `Buy ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
-                      : `Sell ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`}
+                    {marketStatus.open
+                      ? holdingAction === "buy"
+                        ? `Buy ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
+                        : `Sell ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
+                      : holdingAction === "buy"
+                        ? `Queue Buy ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
+                        : `Queue Sell ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
+                    }
                   </button>
                 </div>
               )}
