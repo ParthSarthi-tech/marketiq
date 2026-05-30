@@ -131,6 +131,8 @@ export function useIndianStocks() {
       }
     >
   >(new Map());
+  const [wsConnected, setWsConnected] = useState(false);
+  const rateLimitBackoffRef = useRef(0);
 
   const { data: initialData, isLoading } = useQuery({
     queryKey: ["indianStocks"],
@@ -214,6 +216,7 @@ export function useIndianStocks() {
             });
           }
           setLiveQuotes(newLiveQuotes);
+          setWsConnected(true);
         },
         () => {},
       );
@@ -231,6 +234,10 @@ export function useIndianStocks() {
     const tickers = Object.keys(STOCK_CONFIG);
 
     const pollQuotes = async () => {
+      if (wsConnected) return;
+
+      if (rateLimitBackoffRef.current > Date.now()) return;
+
       const keys = tickers.map((t) => getResolvedKey(t)).filter(Boolean) as string[];
 
       if (keys.length === 0) return;
@@ -260,14 +267,17 @@ export function useIndianStocks() {
         }
 
         setLiveQuotes(newLiveQuotes);
-      } catch {}
+        rateLimitBackoffRef.current = 0;
+      } catch {
+        rateLimitBackoffRef.current = Date.now() + 30000;
+      }
     };
 
     pollQuotes();
-    const interval = setInterval(pollQuotes, 5000);
+    const interval = setInterval(pollQuotes, wsConnected ? 60000 : 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [wsConnected]);
 
   const stocks =
     initialData?.map((s) => {

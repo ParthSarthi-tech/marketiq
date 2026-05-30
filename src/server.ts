@@ -12,7 +12,7 @@ let serverEntryPromise: Promise<ServerEntry> | undefined;
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
     serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => ((m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry)),
+      (m) => (m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry),
     );
   }
   return serverEntryPromise;
@@ -75,6 +75,20 @@ export default {
     } catch (error) {
       console.error(error);
       return brandedErrorResponse();
+    }
+  },
+
+  async scheduled(_controller: unknown, _env: unknown, _ctx: unknown) {
+    console.log("[Cron] Market open trigger — executing queued orders");
+    try {
+      const { getAdminClient, executeAllQueuedOrders } = await import("./lib/queueExecutor");
+      const supabase = getAdminClient();
+      const result = await executeAllQueuedOrders(supabase);
+      console.log(
+        `[Cron] Queue execution complete: ${result.executed} executed, ${result.failed} failed`,
+      );
+    } catch (error) {
+      console.error("[Cron] Queue execution failed:", error);
     }
   },
 };

@@ -31,9 +31,9 @@ import {
   getQueuedOrders,
   addQueuedOrder,
   cancelQueuedOrder,
-  executeQueuedOrders,
   type QueuedOrder,
 } from "@/lib/orderQueue";
+import { serverExecuteUserQueuedOrders } from "@/lib/queueExecutor";
 import { resetPortfolio } from "@/lib/db";
 import { isMarketOpen as checkMarketOpen } from "@/lib/marketUtils";
 import { toast } from "sonner";
@@ -45,7 +45,7 @@ function getDeterministicSparkline(symbol: string): number[] {
 
 function generateEquityCurve(total: number): { date: string; value: number; nifty: number }[] {
   if (total <= 0) return [];
-  const seed = Math.round(total) % 97 + 1;
+  const seed = (Math.round(total) % 97) + 1;
   const days = 30;
   const now = new Date();
   const data: { date: string; value: number; nifty: number }[] = [];
@@ -58,7 +58,8 @@ function generateEquityCurve(total: number): { date: string; value: number; nift
     if (d.getDay() === 0 || d.getDay() === 6) continue;
     const drift = 0.001 + (i === 0 ? 0.002 : 0);
     const noise = Math.sin(seed * 0.5 + i * 0.7) * 0.006 + Math.cos(seed * 0.3 + i * 0.4) * 0.004;
-    const niftyNoise = Math.sin(seed * 0.2 + i * 0.5) * 0.005 + Math.cos(seed * 0.7 + i * 0.3) * 0.003;
+    const niftyNoise =
+      Math.sin(seed * 0.2 + i * 0.5) * 0.005 + Math.cos(seed * 0.7 + i * 0.3) * 0.003;
     v = v * (1 + drift + noise);
     n = n * (1 + 0.0006 + niftyNoise);
     data.push({
@@ -148,37 +149,58 @@ function Portfolio() {
   const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState<TimeRange>("3M");
   const [targetPcts, setTargetPcts] = useState<Record<string, number>>({});
-  const marketStatus = checkMarketOpen();
+  const [marketStatus, setMarketStatus] = useState(() => checkMarketOpen());
   const [orders, setOrders] = useState<QueuedOrder[]>([]);
   const [executedCount, setExecutedCount] = useState(0);
+  const prevMarketOpenRef = useRef(false);
 
   useEffect(() => {
     if (!user?.id) return;
-    getQueuedOrders(user.id).then(setOrders).catch(() => {});
+    getQueuedOrders(user.id)
+      .then(setOrders)
+      .catch(() => {});
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const interval = setInterval(() => {
+      setMarketStatus(checkMarketOpen());
+    }, 15000);
+    return () => clearInterval(interval);
   }, [user?.id]);
 
   useEffect(() => {
     if (!marketStatus.open || !user?.id) return;
+    if (prevMarketOpenRef.current === marketStatus.open) return;
+    prevMarketOpenRef.current = marketStatus.open;
     (async () => {
       try {
-        const orders = await getQueuedOrders(user.id);
-        const pending = orders.filter((o) => o.status === "queued");
+        const pendingOrders = await getQueuedOrders(user.id);
+        const pending = pendingOrders.filter((o) => o.status === "queued");
         if (pending.length === 0) return;
-        const count = await executeQueuedOrders(user.id, buy, sell);
-        if (count > 0) {
-          setExecutedCount(count);
+        const result = await serverExecuteUserQueuedOrders({ data: { userId: user.id } });
+        if (result.executed > 0) {
+          setExecutedCount(result.executed);
           const updated = await getQueuedOrders(user.id);
           setOrders(updated);
+          toast.success(
+            `${result.executed} queued order${result.executed > 1 ? "s" : ""} executed`,
+            {
+              description: "Your orders placed outside market hours have been processed.",
+            },
+          );
+          queryClient.invalidateQueries({ queryKey: ["portfolio", user.id] });
+          queryClient.invalidateQueries({ queryKey: ["cashBalance", user.id] });
         }
       } catch (e) {
-          console.warn("[Portfolio] Operation failed", e);
-        }
+        console.warn("[Portfolio] Queue execution failed", e);
+      }
     })();
   }, [marketStatus.open, user?.id]);
 
   useEffect(() => {
     if (executedCount === 0) return;
-    const t = setTimeout(() => setExecutedCount(0), 5000);
+    const t = setTimeout(() => setExecutedCount(0), 8000);
     return () => clearTimeout(t);
   }, [executedCount]);
 
@@ -244,7 +266,7 @@ function Portfolio() {
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         const results = await searchInstruments(searchQuery, "NSE");
-        setSearchResults(results.filter(r => r.segment === "NSE_EQ"));
+        setSearchResults(results.filter((r) => r.segment === "NSE_EQ"));
       } catch (e) {
         console.warn("[Portfolio] Search failed", e);
         setSearchResults([]);
@@ -252,7 +274,9 @@ function Portfolio() {
         setSearchLoading(false);
       }
     }, 300);
-    return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    };
   }, [searchQuery]);
 
   const sectors = Object.keys(sectorAllocation);
@@ -287,7 +311,14 @@ function Portfolio() {
       if (marketStatus.open) {
         await buy(selectedStock.ticker, selectedStock.name, buyQty, effectivePrice);
       } else {
-        await addQueuedOrder(user.id, selectedStock.ticker, selectedStock.name, "buy", buyQty, effectivePrice);
+        await addQueuedOrder(
+          user.id,
+          selectedStock.ticker,
+          selectedStock.name,
+          "buy",
+          buyQty,
+          effectivePrice,
+        );
         const updated = await getQueuedOrders(user.id);
         setOrders(updated);
       }
@@ -340,35 +371,41 @@ function Portfolio() {
         subtitle={`${holdings.length} holdings · ₹${cashBalance.toLocaleString("en-IN")} cash available`}
         action={
           <div className="flex gap-2">
-              <div className="relative">
-                <button
-                  onClick={() => setShowSectorDropdown(!showSectorDropdown)}
-                  className={`inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition ${filterSector ? "bg-primary/20 text-primary border border-primary/30" : ""}`}
-                >
-                  <Filter className="w-4 h-4" /> {filterSector || "Filter"}
-                </button>
-                {showSectorDropdown && (
-                  <div className="absolute top-full right-0 mt-2 bg-background border border-border/60 rounded-xl shadow-lg overflow-hidden z-20 min-w-[200px]">
-                    {sectors.map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => { setFilterSector(s); setShowSectorDropdown(false); }}
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-card/60 transition ${filterSector === s ? "bg-primary/10 text-primary font-medium" : ""}`}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                    {filterSector && (
-                      <button
-                        onClick={() => { setFilterSector(null); setShowSectorDropdown(false); }}
-                        className="w-full px-4 py-2 text-left text-sm text-muted-foreground hover:bg-card/60 border-t border-border/40"
-                      >
-                        Clear filter
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+            <div className="relative">
+              <button
+                onClick={() => setShowSectorDropdown(!showSectorDropdown)}
+                className={`inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition ${filterSector ? "bg-primary/20 text-primary border border-primary/30" : ""}`}
+              >
+                <Filter className="w-4 h-4" /> {filterSector || "Filter"}
+              </button>
+              {showSectorDropdown && (
+                <div className="absolute top-full right-0 mt-2 bg-background border border-border/60 rounded-xl shadow-lg overflow-hidden z-20 min-w-[200px]">
+                  {sectors.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => {
+                        setFilterSector(s);
+                        setShowSectorDropdown(false);
+                      }}
+                      className={`w-full px-4 py-2 text-left text-sm hover:bg-card/60 transition ${filterSector === s ? "bg-primary/10 text-primary font-medium" : ""}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                  {filterSector && (
+                    <button
+                      onClick={() => {
+                        setFilterSector(null);
+                        setShowSectorDropdown(false);
+                      }}
+                      className="w-full px-4 py-2 text-left text-sm text-muted-foreground hover:bg-card/60 border-t border-border/40"
+                    >
+                      Clear filter
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               onClick={handleExport}
               className="inline-flex items-center gap-2 glass text-sm px-4 py-2.5 rounded-xl hover:bg-card/60 transition"
@@ -484,7 +521,8 @@ function Portfolio() {
                 return seg;
               })}
               <text
-                x="100" y="88"
+                x="100"
+                y="88"
                 textAnchor="middle"
                 fill="oklch(0.6 0 0)"
                 fontSize="11"
@@ -494,7 +532,8 @@ function Portfolio() {
                 TOTAL
               </text>
               <text
-                x="100" y="115"
+                x="100"
+                y="115"
                 textAnchor="middle"
                 fill="oklch(0.9 0 0)"
                 fontSize="18"
@@ -587,8 +626,7 @@ function Portfolio() {
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {order.quantity} × ₹{order.price.toLocaleString("en-IN")}
-                      <span className="mx-1">·</span>
-                      ₹{order.total_cost.toLocaleString("en-IN")}
+                      <span className="mx-1">·</span>₹{order.total_cost.toLocaleString("en-IN")}
                     </div>
                     <div className="text-[10px] text-muted-foreground/60">
                       {new Date(order.created_at).toLocaleString("en-IN", {
@@ -599,13 +637,13 @@ function Portfolio() {
                       })}
                     </div>
                   </div>
-                    {order.status === "queued" && user?.id && (
-                        <button
-                          onClick={async () => {
-                            await cancelQueuedOrder(user.id, order.id);
-                            const updated = await getQueuedOrders(user.id);
-                            setOrders(updated);
-                          }}
+                  {order.status === "queued" && user?.id && (
+                    <button
+                      onClick={async () => {
+                        await cancelQueuedOrder(user.id, order.id);
+                        const updated = await getQueuedOrders(user.id);
+                        setOrders(updated);
+                      }}
                       className="text-[10px] text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg border border-border/40 hover:border-border"
                     >
                       Cancel
@@ -749,7 +787,8 @@ function Portfolio() {
                                 : "bg-[var(--bear)]/10 text-[var(--bear)]"
                             }`}
                           >
-                            {action} ~₹{needValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                            {action} ~₹
+                            {needValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                           </span>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">—</span>
@@ -942,7 +981,9 @@ function Portfolio() {
                         {searchResults.slice(0, 8).map((s) => (
                           <button
                             key={s.instrument_key}
-                            onClick={() => handleStockSelect({ ticker: s.trading_symbol, name: s.name })}
+                            onClick={() =>
+                              handleStockSelect({ ticker: s.trading_symbol, name: s.name })
+                            }
                             className="w-full px-4 py-2 text-left hover:bg-card/60 transition text-sm"
                           >
                             <span className="font-mono text-primary">{s.trading_symbol}</span>
@@ -953,14 +994,18 @@ function Portfolio() {
                     )}
                     {showStockDropdown && searchLoading && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/60 rounded-xl shadow-lg z-10 p-3 text-center text-sm text-muted-foreground">
-                        <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" />Searching...
+                        <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" />
+                        Searching...
                       </div>
                     )}
-                    {showStockDropdown && !searchLoading && searchQuery && searchResults.length === 0 && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/60 rounded-xl shadow-lg z-10 p-3 text-center text-sm text-muted-foreground">
-                        No stocks found for "{searchQuery}"
-                      </div>
-                    )}
+                    {showStockDropdown &&
+                      !searchLoading &&
+                      searchQuery &&
+                      searchResults.length === 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border/60 rounded-xl shadow-lg z-10 p-3 text-center text-sm text-muted-foreground">
+                          No stocks found for "{searchQuery}"
+                        </div>
+                      )}
                   </div>
                 </div>
 
@@ -983,12 +1028,15 @@ function Portfolio() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                        <label className="text-sm text-muted-foreground mb-1.5 block">Quantity</label>
+                    <label className="text-sm text-muted-foreground mb-1.5 block">Quantity</label>
                     <input
                       type="text"
                       inputMode="numeric"
                       value={quantityInput}
-                      onChange={(e) => { const v = e.target.value; if (v === "" || /^\d+$/.test(v)) setQuantityInput(v); }}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "" || /^\d+$/.test(v)) setQuantityInput(v);
+                      }}
                       className="w-full bg-background/50 border border-border/60 rounded-xl py-2.5 px-4 text-sm focus:outline-none focus:border-primary/50"
                     />
                   </div>
@@ -1041,17 +1089,16 @@ function Portfolio() {
                 {!marketStatus.open && (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-[var(--gold)]/10 border border-[var(--gold)]/30">
                     <Clock className="w-4 h-4 text-[var(--gold)] shrink-0" />
-                    <span className="text-xs text-[var(--gold)]">Market closed — order will be queued</span>
+                    <span className="text-xs text-[var(--gold)]">
+                      Market closed — order will be queued
+                    </span>
                   </div>
                 )}
 
                 <button
                   onClick={handleBuy}
                   disabled={
-                    !selectedStock ||
-                    effectivePrice <= 0 ||
-                    totalCost > cashBalance ||
-                    buying
+                    !selectedStock || effectivePrice <= 0 || totalCost > cashBalance || buying
                   }
                   className="w-full bg-gradient-primary text-primary-foreground font-semibold py-3 rounded-xl shadow-glow hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
@@ -1239,8 +1286,7 @@ function Portfolio() {
                   <div className="text-xs text-muted-foreground mt-2 text-right">
                     {holdingAction === "buy"
                       ? `Remaining: ₹${Math.max(0, cashBalance - holdingQuantity * selectedHolding.currentPrice).toLocaleString("en-IN")}`
-                      : `Cash after sale: ₹${Math.max(0, cashBalance + holdingQuantity * selectedHolding.currentPrice).toLocaleString("en-IN")}`
-                    }
+                      : `Cash after sale: ₹${Math.max(0, cashBalance + holdingQuantity * selectedHolding.currentPrice).toLocaleString("en-IN")}`}
                   </div>
                   {!marketStatus.open && (
                     <div className="flex items-center gap-1.5 mt-3 p-2 rounded-lg bg-[var(--gold)]/10 border border-[var(--gold)]/20 text-xs text-[var(--gold)]">
@@ -1283,7 +1329,10 @@ function Portfolio() {
                         if (holdingAction === "buy") {
                           toast(`${selectedHolding.ticker} added to portfolio`, {
                             description: `${holdingQuantity} share${holdingQuantity > 1 ? "s" : ""} at ₹${selectedHolding.currentPrice.toLocaleString("en-IN")}`,
-                            action: { label: "View Portfolio", onClick: () => navigate({ to: "/app/portfolio" }) },
+                            action: {
+                              label: "View Portfolio",
+                              onClick: () => navigate({ to: "/app/portfolio" }),
+                            },
                           });
                         } else {
                           toast(`${selectedHolding.ticker} sold`, {
@@ -1312,8 +1361,7 @@ function Portfolio() {
                         : `Sell ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
                       : holdingAction === "buy"
                         ? `Queue Buy ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
-                        : `Queue Sell ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`
-                    }
+                        : `Queue Sell ${holdingQuantity} Share${holdingQuantity > 1 ? "s" : ""}`}
                   </button>
                 </div>
               )}
@@ -1444,7 +1492,10 @@ function Portfolio() {
                   <RefreshCw className="w-5 h-5 text-[var(--bear)]" />
                   Reset Portfolio
                 </h2>
-                <button onClick={() => setShowResetModal(false)} className="p-2 hover:bg-card/60 rounded-xl transition">
+                <button
+                  onClick={() => setShowResetModal(false)}
+                  className="p-2 hover:bg-card/60 rounded-xl transition"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -1455,7 +1506,8 @@ function Portfolio() {
                   <div className="text-sm text-muted-foreground leading-relaxed">
                     <strong className="text-foreground">Use only in extreme cases.</strong>
                     <br />
-                    We want to make this a real portfolio experience. If you made a mistake and need a fresh start, this will:
+                    We want to make this a real portfolio experience. If you made a mistake and need
+                    a fresh start, this will:
                   </div>
                 </div>
                 <ul className="mt-3 space-y-1.5 text-sm text-muted-foreground ml-8 list-disc">
@@ -1463,9 +1515,7 @@ function Portfolio() {
                   <li>Delete all transaction history</li>
                   <li>Restore virtual cash to ₹2,50,000</li>
                 </ul>
-                <p className="mt-3 text-sm text-muted-foreground italic">
-                  Happy learning! 📈
-                </p>
+                <p className="mt-3 text-sm text-muted-foreground italic">Happy learning! 📈</p>
               </div>
 
               <div className="flex gap-3">
@@ -1492,7 +1542,13 @@ function Portfolio() {
   );
 }
 
-function PerformanceChart({ totalValue: tv, hasRealHistory }: { totalValue: number; hasRealHistory: boolean }) {
+function PerformanceChart({
+  totalValue: tv,
+  hasRealHistory,
+}: {
+  totalValue: number;
+  hasRealHistory: boolean;
+}) {
   const data = useMemo(() => generateEquityCurve(tv), [tv]);
   if (data.length === 0) return null;
 
@@ -1568,7 +1624,8 @@ function PerformanceChart({ totalValue: tv, hasRealHistory }: { totalValue: numb
       </ResponsiveContainer>
       {!hasRealHistory && (
         <div className="text-[10px] text-muted-foreground text-center mt-2 italic">
-          Simulated projection based on current portfolio value. Real performance data will appear as you accumulate trade history.
+          Simulated projection based on current portfolio value. Real performance data will appear
+          as you accumulate trade history.
         </div>
       )}
     </div>

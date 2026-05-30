@@ -19,8 +19,31 @@ function setCache(key: string, data: unknown): void {
   cache.set(key, { data, timestamp: Date.now() });
 }
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const response = await fetch(url, options);
+
+    if (response.status !== 429) return response;
+
+    const backoff = Math.min(1000 * Math.pow(2, attempt), 8000);
+    console.warn(
+      `[UpstoxProxy] 429 rate limited, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})`,
+    );
+    await new Promise((r) => setTimeout(r, backoff));
+  }
+
+  return fetch(url, options);
+}
+
 function getServerToken(): string {
-  const token = process.env.UPSTOX_ACCESS_TOKEN || (process.env as Record<string, string>)["VITE_UPSTOX_ACCESS_TOKEN"] || "";
+  const token =
+    process.env.UPSTOX_ACCESS_TOKEN ||
+    (process.env as Record<string, string>)["VITE_UPSTOX_ACCESS_TOKEN"] ||
+    "";
   return token;
 }
 
@@ -53,18 +76,7 @@ export const proxyGetQuotesBatch = createServerFn({ method: "GET" })
         if (cached) return cached;
 
         const url = `${UPSTOX_V2_URL}/market-quote/quotes?instrument_key=${keysParam}`;
-        const response = await fetch(url, { headers: getHeaders() });
-
-        if (response.status === 429) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const retryResponse = await fetch(url, { headers: getHeaders() });
-          if (!retryResponse.ok) return {};
-          const retryData = await retryResponse.json();
-          const result = (retryData as { data?: Json }).data || {};
-          setCache(cacheKey, result);
-          return result;
-        }
-
+        const response = await fetchWithRetry(url, { headers: getHeaders() });
         if (!response.ok) return {};
         const data = await response.json();
         const result = (data as { data?: Json }).data || {};
@@ -89,7 +101,7 @@ export const proxyGetStockQuote = createServerFn({ method: "GET" })
     if (cached) return cached;
 
     const url = `${UPSTOX_V2_URL}/market-quote/quotes?instrument_key=${encodeURIComponent(instrumentKey)}`;
-    const response = await fetch(url, { headers: getHeaders() });
+    const response = await fetchWithRetry(url, { headers: getHeaders() });
     if (!response.ok) return null;
     const data = await response.json();
     const result = (data as { data?: Json }).data || null;
@@ -112,7 +124,7 @@ export const proxySearchInstruments = createServerFn({ method: "GET" })
     params.set("records", "20");
 
     const url = `${UPSTOX_V2_URL}/instruments/search?${params.toString()}`;
-    const response = await fetch(url, { headers: getHeaders() });
+    const response = await fetchWithRetry(url, { headers: getHeaders() });
     if (!response.ok) return [];
     const data = await response.json();
     const result = (data as { data?: Json }).data || [];
@@ -120,43 +132,33 @@ export const proxySearchInstruments = createServerFn({ method: "GET" })
     return result;
   });
 
-export const proxyGetMarketStatus = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const url = `${UPSTOX_V2_URL}/market-status?exchange=NSE`;
-    const response = await fetch(url, { headers: getHeaders() });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const statuses = (data as { data?: Json[] }).data;
-    return statuses?.[0] || null;
-  });
+export const proxyGetMarketStatus = createServerFn({ method: "GET" }).handler(async () => {
+  const url = `${UPSTOX_V2_URL}/market-status?exchange=NSE`;
+  const response = await fetchWithRetry(url, { headers: getHeaders() });
+  if (!response.ok) return null;
+  const data = await response.json();
+  const statuses = (data as { data?: Json[] }).data;
+  return statuses?.[0] || null;
+});
 
-export const proxyGetWebSocketAuthUrl = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const url = `${UPSTOX_V2_URL}/feed/market-data-feed/authorize`;
-    const response = await fetch(url, {
-      headers: { ...getHeaders(), Accept: "application/json" },
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return (data as { data?: { authorized_redirect_uri?: string } }).data?.authorized_redirect_uri || null;
+export const proxyGetWebSocketAuthUrl = createServerFn({ method: "GET" }).handler(async () => {
+  const url = `${UPSTOX_V2_URL}/feed/market-data-feed/authorize`;
+  const response = await fetchWithRetry(url, {
+    headers: { ...getHeaders(), Accept: "application/json" },
   });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return (
+    (data as { data?: { authorized_redirect_uri?: string } }).data?.authorized_redirect_uri || null
+  );
+});
 
 // Generic proxy: client sends a URL, server fetches it with the token and returns raw JSON
 export const proxyUpstoxFetch = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => d as { url: string; method: string })
   .handler(async (ctx) => {
     const { url, method } = ctx.data;
-    const response = await fetch(url, { method, headers: getHeaders() });
-
-    if (response.status === 429) {
-      await new Promise((r) => setTimeout(r, 1000));
-      const retryResponse = await fetch(url, { method, headers: getHeaders() });
-      if (!retryResponse.ok) {
-        const errData = await retryResponse.json().catch(() => ({}));
-        return { status: "error", error: errData };
-      }
-      return retryResponse.json();
-    }
+    const response = await fetchWithRetry(url, { method, headers: getHeaders() });
 
     if (!response.ok) {
       const errData = await response.json().catch(() => ({}));
