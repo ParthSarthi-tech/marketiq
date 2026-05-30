@@ -26,6 +26,7 @@ import { useUserProfile } from "@/hooks/useUserProfile";
 import { STOCK_CONFIG, getAllTickers, getStockName } from "@/lib/stockMetadata";
 import { DisclosureFooter } from "@/components/DisclosureFooter";
 import { getQueuedOrders, type QueuedOrder } from "@/lib/orderQueue";
+import { serverExecuteUserQueuedOrders } from "@/lib/queueExecutor";
 import { toast } from "sonner";
 
 const nav: { to: string; label: string; icon: any; exact?: boolean }[] = [
@@ -220,6 +221,41 @@ export function AppShell() {
     const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  // Auto-execute queued orders when market opens — works on ANY page
+  const prevMarketOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const now = new Date();
+    const day = now.getDay();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    const isOpen = day !== 0 && day !== 6 && mins >= 555 && mins < 930;
+
+    const shouldExecute = isOpen && !prevMarketOpenRef.current;
+    prevMarketOpenRef.current = isOpen;
+
+    if (!shouldExecute) return;
+
+    (async () => {
+      try {
+        const orders = await getQueuedOrders(user.id);
+        const pending = orders.filter((o) => o.status === "queued");
+        if (pending.length === 0) return;
+
+        const result = await serverExecuteUserQueuedOrders({ data: { userId: user.id } });
+        if (result.executed > 0) {
+          toast.success(
+            `${result.executed} queued order${result.executed > 1 ? "s" : ""} executed`,
+            { description: "Your orders placed outside market hours have been processed." },
+          );
+        }
+      } catch (e) {
+        console.warn("[AppShell] Queue execution failed", e);
+      }
+    })();
+  }, [time, user?.id]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ ticker: string; name: string }[]>([]);

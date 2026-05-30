@@ -407,24 +407,33 @@ export function AuthForm({ mode, cta }: Props) {
 
 function SocialButtons() {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <SocialBtn label="Google" />
-      <SocialBtn label="Apple" />
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <SocialBtn label="Google" />
+        <SocialBtn label="Apple" />
+      </div>
+      <p className="text-[10px] text-center text-muted-foreground font-mono tracking-wide">
+        Google &amp; Apple sign-up coming soon — use email to get started
+      </p>
     </div>
   );
 }
 
 function SocialBtn({ label }: { label: string }) {
   return (
-    <motion.button
-      type="button"
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.97 }}
-      className="glass rounded-xl py-2.5 text-sm font-medium hover:bg-card/60 transition inline-flex items-center justify-center gap-2"
-    >
-      {label === "Google" ? <GoogleIcon /> : <AppleIcon />}
-      {label}
-    </motion.button>
+    <div className="relative">
+      <span className="absolute -top-1.5 -right-1.5 z-10 px-1.5 py-0.5 rounded-full bg-accent text-[8px] font-bold uppercase tracking-wider text-black shadow-md">
+        Soon
+      </span>
+      <motion.button
+        type="button"
+        disabled
+        className="w-full glass rounded-xl py-2.5 text-sm font-medium opacity-40 cursor-not-allowed inline-flex items-center justify-center gap-2"
+      >
+        {label === "Google" ? <GoogleIcon /> : <AppleIcon />}
+        {label}
+      </motion.button>
+    </div>
   );
 }
 
@@ -432,7 +441,7 @@ function Divider() {
   return (
     <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-mono">
       <div className="h-px flex-1 bg-border" />
-      or with email
+      or continue with email
       <div className="h-px flex-1 bg-border" />
     </div>
   );

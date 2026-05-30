@@ -19,11 +19,11 @@ type Scene = {
 };
 
 const SCENES: Scene[] = [
-  { id: "quiz",      label: "The 2-min quiz",     blurb: "Three questions capture your income, risk and horizon — no jargon, no forms.", duration: 8500, Icon: Target },
-  { id: "ai",        label: "AI matches you",     blurb: "Our model cross-references 4,200 NSE & BSE tickers against 38 signals in real time.", duration: 8800, Icon: Brain },
-  { id: "pick",      label: "Hand-picked stocks", blurb: "Watch the cursor add winners to your basket — set the quantity, lock the entry.", duration: 9500, Icon: Sparkles },
-  { id: "portfolio", label: "Virtual portfolio",  blurb: "Allocations rebalance instantly. Zero real money, full market exposure.", duration: 8500, Icon: Wallet },
-  { id: "growth",    label: "Watch it grow",      blurb: "90 days later — every trade reviewed by AI, every lesson saved to your journal.", duration: 8200, Icon: TrendingUp },
+  { id: "quiz",      label: "The 2-min quiz",     blurb: "Three questions capture your income, risk and horizon — no jargon, no forms.", duration: 7000, Icon: Target },
+  { id: "ai",        label: "AI matches you",     blurb: "Our model cross-references 4,200 NSE & BSE tickers against 38 signals in real time.", duration: 7200, Icon: Brain },
+  { id: "pick",      label: "Hand-picked stocks", blurb: "Watch the cursor add winners to your basket — set the quantity, lock the entry.", duration: 7800, Icon: Sparkles },
+  { id: "portfolio", label: "Virtual portfolio",  blurb: "Allocations rebalance instantly. Zero real money, full market exposure.", duration: 7000, Icon: Wallet },
+  { id: "growth",    label: "Watch it grow",      blurb: "90 days later — every trade reviewed by AI, every lesson saved to your journal.", duration: 6800, Icon: TrendingUp },
 ];
 
 export function HowItWorksReel() {
