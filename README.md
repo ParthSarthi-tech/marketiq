@@ -35,22 +35,6 @@ MarketIQ helps first-time Indian investors learn stock market concepts through a
 | 3D | React Three Fiber |
 | UI | Radix UI, shadcn-style components |
 
----
-
-## Screenshots
-
-*(Add screenshots here — dashboard, portfolio, discover, AI advisor chat, analyze page)*
-
-| | |
-|:---:|:---:|
-| Dashboard | Portfolio |
-| *[screenshot]* | *[screenshot]* |
-| Discover | Stock Analysis |
-| *[screenshot]* | *[screenshot]* |
-| AI Advisor | Transaction History |
-| *[screenshot]* | *[screenshot]* |
-
----
 
 ## Project Structure
 
