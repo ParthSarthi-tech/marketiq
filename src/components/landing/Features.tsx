@@ -1,4 +1,7 @@
 import { motion } from "framer-motion";
+import { useRef, useEffect } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Activity, Wallet, Brain, BarChart3, ShieldCheck, Sparkles } from "lucide-react";
 
 const features = [
@@ -41,15 +44,41 @@ const features = [
 ];
 
 export function Features() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  gsap.registerPlugin(ScrollTrigger);
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.to(".ft-bg", {
+        scale: 1.2, opacity: 0.2,
+        ease: "none",
+        scrollTrigger: { trigger: ".ft-section", start: "top bottom", end: "bottom top", scrub: 1.5 },
+      });
+      gsap.fromTo(".ft-content",
+        { opacity: 0, y: 40 },
+        { opacity: 1, y: 0, ease: "none",
+          scrollTrigger: { trigger: ".ft-section", start: "top 75%", end: "top 30%", scrub: 1 },
+        },
+      );
+      gsap.fromTo(".ft-card",
+        { opacity: 0, y: 50, scale: 0.95 },
+        { opacity: 1, y: 0, scale: 1, stagger: 0.08, ease: "none",
+          scrollTrigger: { trigger: ".ft-section", start: "top 70%", end: "center 40%", scrub: 1 },
+        },
+      );
+    });
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section id="features" className="relative py-32 overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-radial opacity-40 -z-10" />
+    <section ref={sectionRef} id="features" className="ft-section relative py-32 overflow-hidden">
+      <div className="ft-bg absolute inset-0 bg-gradient-radial opacity-40 -z-10" style={{ willChange: "transform" }} />
       <div className="mx-auto max-w-7xl px-6">
-        <motion.div
+         <motion.div
           initial={{ opacity: 0, y: 30 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
-          className="text-center max-w-3xl mx-auto mb-20"
+          className="ft-content text-center max-w-3xl mx-auto mb-20"
         >
           <div className="inline-block glass rounded-full px-4 py-1.5 text-xs font-medium text-muted-foreground mb-5">
             Everything in one terminal
@@ -71,7 +100,7 @@ export function Features() {
               viewport={{ once: true, margin: "-50px" }}
               transition={{ delay: i * 0.08, duration: 0.6 }}
               whileHover={{ y: -6, scale: 1.02 }}
-              className="group relative glass rounded-3xl p-7 hover:bg-card/70 transition overflow-hidden"
+              className="ft-card group relative glass rounded-3xl p-7 hover:bg-card/70 transition overflow-hidden"
             >
               <div
                 className="absolute -top-20 -right-20 w-48 h-48 rounded-full opacity-0 group-hover:opacity-30 transition duration-700 blur-3xl"

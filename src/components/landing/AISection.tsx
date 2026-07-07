@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Brain, Target, Clock, TrendingUp, Check, ArrowRight } from "lucide-react";
 import floatAi from "@/assets/float-ai.png";
 
@@ -17,15 +19,45 @@ export function AISection() {
   const rotate = useTransform(scrollYProgress, [0, 1], [0, 360]);
   const yImg = useTransform(scrollYProgress, [0, 1], [-50, 50]);
 
+  gsap.registerPlugin(ScrollTrigger);
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.to(".ai-bg-grid", {
+        opacity: 0.5,
+        ease: "none",
+        scrollTrigger: { trigger: ".ai-section", start: "top bottom", end: "bottom top", scrub: 1.5 },
+      });
+      gsap.fromTo(".ai-left",
+        { opacity: 0, x: -40 },
+        { opacity: 1, x: 0, ease: "none",
+          scrollTrigger: { trigger: ".ai-section", start: "top 75%", end: "center 40%", scrub: 1 },
+        },
+      );
+      gsap.fromTo(".ai-card",
+        { opacity: 0, x: 40, scale: 0.95 },
+        { opacity: 1, x: 0, scale: 1, ease: "none",
+          scrollTrigger: { trigger: ".ai-section", start: "top 75%", end: "center 40%", scrub: 1 },
+        },
+      );
+      gsap.to(".ai-float", {
+        y: -80,
+        ease: "none",
+        scrollTrigger: { trigger: ".ai-section", start: "top bottom", end: "bottom top", scrub: 1.2 },
+      });
+    });
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section id="ai" ref={ref} className="relative py-32 overflow-hidden">
-      <div className="absolute inset-0 grid-bg opacity-30 -z-10" />
+    <section id="ai" ref={ref} className="ai-section relative py-32 overflow-hidden">
+      <div className="ai-bg-grid absolute inset-0 grid-bg opacity-30 -z-10" />
       <div className="mx-auto max-w-7xl px-6 grid lg:grid-cols-2 gap-16 items-center">
         <motion.div
           initial={{ opacity: 0, x: -40 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
+          className="ai-left"
         >
           <div className="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-xs mb-6">
             <Brain className="w-3.5 h-3.5 text-accent" />
@@ -65,7 +97,7 @@ export function AISection() {
           </Link>
         </motion.div>
 
-        <InteractiveMatchCard yImg={yImg} rotate={rotate} />
+        <div className="ai-card"><InteractiveMatchCard yImg={yImg} rotate={rotate} /></div>
       </div>
     </section>
   );
@@ -111,7 +143,7 @@ function InteractiveMatchCard({ yImg, rotate }: { yImg: any; rotate: any }) {
         style={{ y: yImg }}
         src={floatAi} alt=""
         loading="lazy" width={120} height={120}
-        className="absolute -top-10 -right-6 w-24 animate-float drop-shadow-[0_0_40px_oklch(0.85_0.16_90_/_0.6)] pointer-events-none"
+        className="ai-float absolute -top-10 -right-6 w-24 animate-float drop-shadow-[0_0_40px_oklch(0.85_0.16_90_/_0.6)] pointer-events-none"
       />
 
       <div className="glass rounded-3xl p-6 shadow-elegant relative overflow-hidden">
@@ -176,7 +208,6 @@ function InteractiveMatchCard({ yImg, rotate }: { yImg: any; rotate: any }) {
               viewport={{ once: true }}
               transition={{ delay: 1 + idx * 0.18, duration: 0.6 }}
               whileHover={{ scale: 1.03, x: 6 }}
-              transition={{ type: "spring", stiffness: 300, damping: 18 }}
               className="group relative flex items-center gap-3 p-3 rounded-xl bg-card/40 border border-border hover:border-primary/40 hover:bg-card/70 transition cursor-pointer"
             >
               <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow shrink-0">

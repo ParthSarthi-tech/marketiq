@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowRight } from "lucide-react";
 
 const WORDS = ["thinks", "teaches", "warns", "explains", "rewards"];
@@ -13,9 +15,32 @@ export function FeaturesHero() {
 
   const headline = "The toolkit that ".split("");
 
+  gsap.registerPlugin(ScrollTrigger);
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.to(".fh-bg-glow", {
+        scale: 1.3, opacity: 0.15,
+        ease: "none",
+        scrollTrigger: { trigger: ".fh-section", start: "top top", end: "bottom top", scrub: 1.5 },
+      });
+      gsap.to(".fh-content", {
+        y: -60, opacity: 0,
+        ease: "none",
+        scrollTrigger: { trigger: ".fh-section", start: "top top", end: "bottom top", scrub: 1 },
+      });
+      gsap.to(".fh-line", {
+        scaleX: 0,
+        ease: "none",
+        scrollTrigger: { trigger: ".fh-section", start: "top top", end: "bottom top", scrub: 1 },
+      });
+    });
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section ref={ref} className="relative pt-36 pb-24 overflow-hidden">
+    <section ref={ref} className="fh-section relative pt-36 pb-24 overflow-hidden">
       <motion.div style={{ y, opacity }} className="absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-radial opacity-60 fh-bg-glow" style={{ willChange: "transform" }} />
         <div className="absolute inset-0 bg-gradient-radial opacity-60" />
         <motion.div
           initial={{ scale: 0.6, opacity: 0 }}
@@ -30,11 +55,11 @@ export function FeaturesHero() {
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ duration: 1.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute top-32 left-0 right-0 h-px origin-left"
+        className="fh-line absolute top-32 left-0 right-0 h-px origin-left"
         style={{ background: "linear-gradient(90deg, transparent, var(--bull), transparent)" }}
       />
 
-      <motion.div style={{ y }} className="relative mx-auto max-w-6xl px-6">
+      <motion.div style={{ y }} className="fh-content relative mx-auto max-w-6xl px-6">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

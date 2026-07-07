@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowRight, Brain } from "lucide-react";
 
 const WORDS = ["listens", "thinks", "decides", "explains", "protects"];
@@ -11,10 +13,37 @@ export function AIAdvisorHero() {
   const y = useTransform(scrollYProgress, [0, 1], [0, -80]);
   const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
 
+  gsap.registerPlugin(ScrollTrigger);
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.to(".ai-bg-glow", {
+        scale: 1.3, opacity: 0.12,
+        ease: "none",
+        scrollTrigger: { trigger: ".ai-section", start: "top top", end: "bottom top", scrub: 1.5 },
+      });
+      gsap.to(".ai-content", {
+        y: -60, opacity: 0,
+        ease: "none",
+        scrollTrigger: { trigger: ".ai-section", start: "top top", end: "bottom top", scrub: 1 },
+      });
+      gsap.to(".ai-line", {
+        scaleX: 0,
+        ease: "none",
+        scrollTrigger: { trigger: ".ai-section", start: "top top", end: "bottom top", scrub: 1 },
+      });
+      gsap.to(".ai-ring", {
+        scale: 1.5, opacity: 0,
+        ease: "none",
+        scrollTrigger: { trigger: ".ai-section", start: "top top", end: "bottom top", scrub: 1.2 },
+      });
+    });
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section ref={ref} className="relative pt-36 pb-24 overflow-hidden">
+    <section ref={ref} className="ai-section relative pt-36 pb-24 overflow-hidden">
       <motion.div style={{ y, opacity }} className="absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-radial opacity-60" />
+        <div className="absolute inset-0 bg-gradient-radial opacity-60 ai-bg-glow" style={{ willChange: "transform" }} />
         <motion.div
           initial={{ scale: 0.6, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -25,7 +54,7 @@ export function AIAdvisorHero() {
       </motion.div>
 
       {/* Concentric AI rings */}
-      <div className="pointer-events-none absolute left-1/2 top-44 -translate-x-1/2 -z-10">
+      <div className="ai-ring pointer-events-none absolute left-1/2 top-44 -translate-x-1/2 -z-10">
         {[0, 1, 2].map((i) => (
           <motion.div
             key={i}
@@ -46,11 +75,11 @@ export function AIAdvisorHero() {
         initial={{ scaleX: 0 }}
         animate={{ scaleX: 1 }}
         transition={{ duration: 1.6, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className="absolute top-32 left-0 right-0 h-px origin-left"
+        className="ai-line absolute top-32 left-0 right-0 h-px origin-left"
         style={{ background: "linear-gradient(90deg, transparent, var(--gold), transparent)" }}
       />
 
-      <motion.div style={{ y }} className="relative mx-auto max-w-6xl px-6">
+      <motion.div style={{ y }} className="ai-content relative mx-auto max-w-6xl px-6">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}

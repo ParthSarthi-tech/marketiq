@@ -1,18 +1,36 @@
 import { motion } from "framer-motion";
+import { useRef, useEffect } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowRight, PlayCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { DisclosureFooter } from "@/components/DisclosureFooter";
 
 export function CTA() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  gsap.registerPlugin(ScrollTrigger);
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.fromTo(".cta-card",
+        { opacity: 0, scale: 0.92 },
+        { opacity: 1, scale: 1, ease: "none",
+          scrollTrigger: { trigger: ".cta-section", start: "top 80%", end: "top 35%", scrub: 1 },
+        },
+      );
+    });
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section id="cta" className="relative py-32">
+    <section ref={sectionRef} id="cta" className="cta-section relative py-32">
       <div className="mx-auto max-w-5xl px-6">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7 }}
-          className="relative glass rounded-[2.5rem] p-12 md:p-20 text-center overflow-hidden animate-glow"
+          className="cta-card relative glass rounded-[2.5rem] p-12 md:p-20 text-center overflow-hidden animate-glow"
         >
           <div className="absolute inset-0 bg-gradient-radial opacity-50" />
           <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-gradient-primary opacity-20 blur-3xl" />
