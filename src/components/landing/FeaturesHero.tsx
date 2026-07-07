@@ -123,10 +123,16 @@ export function FeaturesHero() {
           transition={{ delay: 1.4 }}
           className="mt-10 flex items-center justify-center gap-3"
         >
-          <Link to="/sign-up" className="group relative bg-gradient-primary text-primary-foreground text-sm font-semibold px-6 py-3 rounded-full transition shadow-glow inline-flex items-center gap-2 overflow-hidden">
-            <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
-            Open the live tour <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
-          </Link>
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 12 }}
+          >
+            <Link to="/sign-up" className="group relative bg-gradient-primary text-primary-foreground text-sm font-semibold px-6 py-3 rounded-full transition shadow-glow inline-flex items-center gap-2 overflow-hidden">
+              <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+              Open the live tour <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+            </Link>
+          </motion.div>
           <a href="#pillars" className="glass text-sm font-medium px-6 py-3 rounded-full hover:bg-card/70 transition">
             Skip to pillars ↓
           </a>

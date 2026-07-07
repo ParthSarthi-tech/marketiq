@@ -29,17 +29,17 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <main className="relative bg-background text-foreground min-h-screen">
+    <main className="relative bg-background text-foreground min-h-screen snap-container">
       <MarketBackdrop />
       <Navbar />
-      <Hero />
+      <div className="snap-section min-h-screen"><Hero /></div>
       <Ticker />
-      <Features />
-      <AISection />
+      <div className="snap-section"><Features /></div>
+      <div className="snap-section"><AISection /></div>
       <HowItWorksReel />
-      <VirtualPortfolio />
-      <Learn />
-      <CTA />
+      <div className="snap-section"><VirtualPortfolio /></div>
+      <div className="snap-section"><Learn /></div>
+      <div className="snap-section"><CTA /></div>
       <Footer />
     </main>
   );

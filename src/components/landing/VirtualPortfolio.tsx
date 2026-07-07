@@ -53,10 +53,15 @@ export function VirtualPortfolio() {
                 { sym: "INFY", v: "+₹1,084" },
                 { sym: "TATAMOTORS", v: "-₹420" },
               ].map((s) => (
-                <div key={s.sym} className="bg-background/40 rounded-xl p-3">
+                <motion.div
+                  key={s.sym}
+                  whileHover={{ y: -3, scale: 1.03 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                  className="bg-background/40 rounded-xl p-3"
+                >
                   <div className="text-xs text-muted-foreground font-mono">{s.sym}</div>
                   <div className="font-mono font-semibold mt-1" style={{ color: s.v.startsWith('+') ? 'var(--bull)' : 'var(--bear)' }}>{s.v}</div>
-                </div>
+                </motion.div>
               ))}
             </div>
 
@@ -91,17 +96,22 @@ export function VirtualPortfolio() {
             Start with ₹10,00,000 in virtual cash. Build positions on NSE & BSE, watch them move live. When the dust settles, AI walks you through what you nailed and what you missed — every time.
           </p>
           <div className="mt-8 grid grid-cols-2 gap-4">
-            {[
-              { v: "₹10L", l: "Starting balance" },
-              { v: "Real-time", l: "Market data" },
-              { v: "0 risk", l: "Zero real money" },
-              { v: "24/7", l: "AI feedback" },
-            ].map((s) => (
-              <div key={s.l} className="glass rounded-2xl p-4">
-                <div className="font-display font-bold text-2xl text-gradient">{s.v}</div>
-                <div className="text-xs text-muted-foreground mt-1">{s.l}</div>
-              </div>
-            ))}
+              {[
+                { v: "₹10L", l: "Starting balance" },
+                { v: "Real-time", l: "Market data" },
+                { v: "0 risk", l: "Zero real money" },
+                { v: "24/7", l: "AI feedback" },
+              ].map((s) => (
+                <motion.div
+                  key={s.l}
+                  whileHover={{ y: -4, scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 15 }}
+                  className="glass rounded-2xl p-4"
+                >
+                  <div className="font-display font-bold text-2xl text-gradient">{s.v}</div>
+                  <div className="text-xs text-muted-foreground mt-1">{s.l}</div>
+                </motion.div>
+              ))}
           </div>
         </motion.div>
       </div>

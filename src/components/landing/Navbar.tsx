@@ -1,16 +1,27 @@
-import { motion } from "framer-motion";
+import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import { TrendingUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/useAuth";
+import { useRef, useState } from "react";
 
 export function Navbar() {
   const { isAuthenticated, loading } = useAuth();
+  const [hidden, setHidden] = useState(false);
+  const lastY = useRef(0);
+  const { scrollY } = useScroll();
+
+  useMotionValueEvent(scrollY, "change", (y) => {
+    const diff = y - lastY.current;
+    if (Math.abs(diff) < 8) return;
+    setHidden(diff > 0 && y > 120);
+    lastY.current = y;
+  });
 
   return (
     <motion.header
       initial={{ y: -40, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6 }}
+      animate={{ y: hidden ? -100 : 0, opacity: 1 }}
+      transition={{ duration: 0.3, ease: "easeInOut" }}
       className="fixed top-0 inset-x-0 z-50"
     >
       <div className="mx-auto max-w-7xl px-6 mt-4">

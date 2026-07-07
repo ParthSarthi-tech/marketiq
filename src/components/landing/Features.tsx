@@ -70,6 +70,7 @@ export function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-50px" }}
               transition={{ delay: i * 0.08, duration: 0.6 }}
+              whileHover={{ y: -6, scale: 1.02 }}
               className="group relative glass rounded-3xl p-7 hover:bg-card/70 transition overflow-hidden"
             >
               <div

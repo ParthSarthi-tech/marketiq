@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowRight, Sparkles, PlayCircle } from "lucide-react";
 import heroImg from "@/assets/hero-chart.jpg";
 import floatTicker from "@/assets/float-ticker.png";
@@ -15,6 +17,15 @@ export function Hero() {
   const y3 = useTransform(scrollYProgress, [0, 1], [0, 100]);
   const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
   const scale = useTransform(scrollYProgress, [0, 1], [1, 1.1]);
+
+  gsap.registerPlugin(ScrollTrigger);
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.fromTo(".gsap-hero-content", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 1.2, delay: 0.3, ease: "power3.out" });
+      gsap.fromTo(".gsap-stat", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.8, stagger: 0.15, delay: 0.8, ease: "back.out(1.7)" });
+    });
+    return () => ctx.revert();
+  }, []);
 
   return (
     <section ref={ref} className="relative min-h-screen pt-32 pb-20 overflow-hidden grid-bg">
@@ -42,7 +53,7 @@ export function Hero() {
         className="absolute bottom-20 right-[15%] w-32 md:w-48 animate-float opacity-80 drop-shadow-[0_0_40px_oklch(0.78_0.18_155_/_0.4)]"
       />
 
-      <div className="relative mx-auto max-w-7xl px-6 text-center">
+      <div className="relative mx-auto max-w-7xl px-6 text-center gsap-hero-content">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -92,7 +103,7 @@ export function Hero() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 1 }}
-          className="mt-16 grid grid-cols-3 gap-8 max-w-2xl mx-auto"
+          className="mt-16 grid grid-cols-3 gap-8 max-w-2xl mx-auto gsap-stat"
         >
           {[
             { v: "5K+", l: "NSE & BSE stocks" },

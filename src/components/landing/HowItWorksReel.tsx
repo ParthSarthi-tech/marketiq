@@ -564,6 +564,7 @@ function PickRow({
       initial={{ opacity: 0, x: -40, filter: "blur(6px)" }}
       animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
       transition={{ delay: index * 0.45, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      whileHover={{ scale: 1.02, x: 4 }}
       className={`flex items-center gap-3 p-3.5 rounded-2xl glass border transition ${
         added ? "border-bull/60 shadow-glow" : "border-border"
       }`}

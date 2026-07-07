@@ -46,6 +46,7 @@ export function AISection() {
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1 }}
+                whileHover={{ x: 6, scale: 1.01 }}
                 className="flex items-start gap-4 glass rounded-2xl p-4 hover:bg-card/60 transition"
               >
                 <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center shrink-0 shadow-glow">
@@ -174,7 +175,8 @@ function InteractiveMatchCard({ yImg, rotate }: { yImg: any; rotate: any }) {
               whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               viewport={{ once: true }}
               transition={{ delay: 1 + idx * 0.18, duration: 0.6 }}
-              whileHover={{ scale: 1.02, x: 4 }}
+              whileHover={{ scale: 1.03, x: 6 }}
+              transition={{ type: "spring", stiffness: 300, damping: 18 }}
               className="group relative flex items-center gap-3 p-3 rounded-xl bg-card/40 border border-border hover:border-primary/40 hover:bg-card/70 transition cursor-pointer"
             >
               <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center shadow-glow shrink-0">

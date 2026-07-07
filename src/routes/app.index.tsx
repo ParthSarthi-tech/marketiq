@@ -299,13 +299,13 @@ function Dashboard() {
                 {[0, 1, 2].map((i) => (
                   <div
                     key={i}
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-border/40 animate-pulse"
+                    className="flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-border/40"
                   >
-                    <div className="w-14 h-14 rounded-full bg-border/60 shrink-0" />
+                    <div className="w-14 h-14 rounded-full skeleton-shimmer shrink-0" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-3 w-20 bg-border/60 rounded" />
-                      <div className="h-4 w-40 bg-border/60 rounded" />
-                      <div className="h-3 w-56 bg-border/60 rounded" />
+                      <div className="h-3 w-20 skeleton-shimmer rounded" />
+                      <div className="h-4 w-40 skeleton-shimmer rounded" />
+                      <div className="h-3 w-56 skeleton-shimmer rounded" />
                     </div>
                   </div>
                 ))}
@@ -317,6 +317,7 @@ function Dashboard() {
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.1 + 0.2, duration: 0.5 }}
+                  whileHover={{ scale: 1.01, x: 4 }}
                   className="group flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-border/40 hover:border-primary/40 hover:bg-card/60 transition"
                 >
                   <div className="relative w-14 h-14 shrink-0">
@@ -385,53 +386,59 @@ function Dashboard() {
           transition={{ duration: 0.6, delay: 0.25 }}
           className="space-y-4"
         >
-          <Link
-            to="/app/discover"
-            className="block rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-[var(--bull)]/15 flex items-center justify-center text-[var(--bull)] mb-3">
-              <Target className="w-5 h-5" />
-            </div>
-            <div className="font-semibold mb-1">Discover stocks</div>
-            <div className="text-xs text-muted-foreground">AI-matched picks across 12 sectors.</div>
-            <div className="mt-4 text-xs text-primary inline-flex items-center gap-1">
-              Explore <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
-            </div>
-          </Link>
-          <Link
-            to="/app/portfolio"
-            className="block rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-[var(--gold)]/15 flex items-center justify-center text-[var(--gold)] mb-3">
-              <Activity className="w-5 h-5" />
-            </div>
-            <div className="font-semibold mb-1">Virtual portfolio</div>
-            <div className="text-xs text-muted-foreground">
-              {hasHoldings
-                ? `${holdings.length} holdings · ₹${totalValue.toLocaleString("en-IN")} · ${totalPLPercent >= 0 ? "+" : ""}${totalPLPercent.toFixed(1)}%`
-                : "Start building your portfolio"}
-            </div>
-            <div className="mt-4 text-xs text-primary inline-flex items-center gap-1">
-              {hasHoldings ? "Manage" : "Get started"}{" "}
-              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
-            </div>
-          </Link>
-          <Link
-            to="/app/learn"
-            className="block rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition group"
-          >
-            <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary mb-3">
-              <BookOpen className="w-5 h-5" />
-            </div>
-            <div className="font-semibold mb-1">Today's lesson</div>
-            <div className="text-xs text-muted-foreground">
-              Reading the P/E ratio without panic.
-            </div>
-            <div className="mt-4 text-xs text-primary inline-flex items-center gap-1">
-              Start · 4 min{" "}
-              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
-            </div>
-          </Link>
+          <motion.div whileHover={{ y: -4, scale: 1.02 }} transition={{ type: "spring", stiffness: 300, damping: 15 }}>
+            <Link
+              to="/app/discover"
+              className="block rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[var(--bull)]/15 flex items-center justify-center text-[var(--bull)] mb-3">
+                <Target className="w-5 h-5" />
+              </div>
+              <div className="font-semibold mb-1">Discover stocks</div>
+              <div className="text-xs text-muted-foreground">AI-matched picks across 12 sectors.</div>
+              <div className="mt-4 text-xs text-primary inline-flex items-center gap-1">
+                Explore <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
+              </div>
+            </Link>
+          </motion.div>
+          <motion.div whileHover={{ y: -4, scale: 1.02 }} transition={{ type: "spring", stiffness: 300, damping: 15 }}>
+            <Link
+              to="/app/portfolio"
+              className="block rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-[var(--gold)]/15 flex items-center justify-center text-[var(--gold)] mb-3">
+                <Activity className="w-5 h-5" />
+              </div>
+              <div className="font-semibold mb-1">Virtual portfolio</div>
+              <div className="text-xs text-muted-foreground">
+                {hasHoldings
+                  ? `${holdings.length} holdings · ₹${totalValue.toLocaleString("en-IN")} · ${totalPLPercent >= 0 ? "+" : ""}${totalPLPercent.toFixed(1)}%`
+                  : "Start building your portfolio"}
+              </div>
+              <div className="mt-4 text-xs text-primary inline-flex items-center gap-1">
+                {hasHoldings ? "Manage" : "Get started"}{" "}
+                <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
+              </div>
+            </Link>
+          </motion.div>
+          <motion.div whileHover={{ y: -4, scale: 1.02 }} transition={{ type: "spring", stiffness: 300, damping: 15 }}>
+            <Link
+              to="/app/learn"
+              className="block rounded-3xl p-6 bg-gradient-card border border-border/60 hover:border-primary/40 transition group"
+            >
+              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary mb-3">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div className="font-semibold mb-1">Today's lesson</div>
+              <div className="text-xs text-muted-foreground">
+                Reading the P/E ratio without panic.
+              </div>
+              <div className="mt-4 text-xs text-primary inline-flex items-center gap-1">
+                Start · 4 min{" "}
+                <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition" />
+              </div>
+            </Link>
+          </motion.div>
         </motion.div>
       </div>
 
@@ -463,7 +470,8 @@ function Dashboard() {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 + 0.2 }}
-              className="grid grid-cols-12 items-center gap-3 py-3"
+              whileHover={{ scale: 1.01, x: 4, backgroundColor: "var(--card)" }}
+              className="grid grid-cols-12 items-center gap-3 py-3 px-2 -mx-2 rounded-xl transition-colors"
             >
               <div className="col-span-5 sm:col-span-4">
                 <div className="font-mono text-xs text-muted-foreground">{m.sym}</div>

@@ -148,6 +148,32 @@
 }
 .animate-glow { animation: glow-pulse 3s ease-in-out infinite; }
 
+/* ─── Scroll snap landing ─── */
+.snap-container {
+  scroll-snap-type: y mandatory;
+  overflow-y: scroll;
+  height: 100vh;
+}
+.snap-section {
+  scroll-snap-align: start;
+}
+
+/* ─── Shimmer skeleton loading ─── */
+@keyframes shimmer-sweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    oklch(0.22 0.04 255) 25%,
+    oklch(0.28 0.05 260) 37%,
+    oklch(0.22 0.04 255) 50%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+
 /* ─── Shimmer text (live data feel) ─── */
 @keyframes shimmer-text {
   0% { background-position: 200% 0; }
